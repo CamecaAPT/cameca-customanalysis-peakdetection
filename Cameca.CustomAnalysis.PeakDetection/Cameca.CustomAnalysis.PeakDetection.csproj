@@ -35,6 +35,7 @@
 	</PropertyGroup>
 
 	<ItemGroup Label="Package Dependencies">
+		<PackageReference Include="Cameca.CustomAnalysis.PythonCore" Version="1.6.1" />
 		<PackageReference Include="Cameca.CustomAnalysis.Utilities" Version="3.7.0-alpha.12" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
@@ -43,6 +44,13 @@
 		<None Include="..\icon.png" Pack="True" PackagePath="$(PackageIcon)" />
 		<None Include="..\README.md" Pack="True" PackagePath="$(PackageReadmeFile)" />
 		<None Include="..\LICENSE" Pack="True" PackagePath="$(PackageLicenseFile)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="content\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>%(Filename)%(Extension)</TargetPath>
+		</None>
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">

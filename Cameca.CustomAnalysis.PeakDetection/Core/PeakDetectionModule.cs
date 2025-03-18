@@ -1,4 +1,5 @@
 ﻿using Cameca.CustomAnalysis.Interface;
+using Cameca.CustomAnalysis.PythonCore;
 using Cameca.CustomAnalysis.Utilities;
 using Prism.Ioc;
 using Prism.Modularity;
@@ -13,6 +14,7 @@ public class PeakDetectionModule : IModule
     public void RegisterTypes(IContainerRegistry containerRegistry)
     {
         containerRegistry.AddCustomAnalysisUtilities(options => options.UseStandardBaseClasses = true);
+        containerRegistry.RegisterPythonDistribution();
 
         containerRegistry.Register<object, PeakDetection>(PeakDetection.UniqueId);
         containerRegistry.RegisterInstance(PeakDetection.DisplayInfo, PeakDetection.UniqueId);
@@ -25,5 +27,7 @@ public class PeakDetectionModule : IModule
         var extensionRegistry = containerProvider.Resolve<IExtensionRegistry>();
 
         extensionRegistry.RegisterAnalysisView<PeakDetectionView, PeakDetectionViewModel>(AnalysisViewLocation.Default);
+
+        containerProvider.InitializePythonDistribution("Peak Detection");
     }
 }
