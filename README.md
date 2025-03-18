@@ -1,2 +1,2 @@
 # Peak Detection
-Copyright 2025 © CAMECA Instruments, Inc. All rights reserved.
+Copyright 2025 © Jingrui Wei, CAMECA Instruments, Inc. All rights reserved.

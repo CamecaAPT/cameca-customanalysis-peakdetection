@@ -19,9 +19,10 @@
 
 	<PropertyGroup Label="Package">
 		<Title>PeakDetection</Title>
-		<Authors>CAMECA Instruments, Inc.</Authors>
-		<Description>Machine learning peak detection</Description>
-		<Copyright>Copyright © CAMECA Instruments, Inc. 2025 All rights reserved.</Copyright>
+		<Authors>Jingrui Wei, CAMECA Instruments, Inc.</Authors>
+		<Description>Machine learning peak detection. Extension wrapping wdwzyyg/peak_detection project.
+		</Description>
+		<Copyright>Copyright © Jingrui Wei, CAMECA Instruments, Inc. 2025 All rights reserved.</Copyright>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
 		<IncludeSymbols>true</IncludeSymbols>
