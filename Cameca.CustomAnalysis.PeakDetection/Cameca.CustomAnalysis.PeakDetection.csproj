@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net6.0-windows7.0</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<Platforms>x64</Platforms>
+		<Nullable>enable</Nullable>
+		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+		<SelfContained>false</SelfContained>
+		<AssemblyName>Cameca.CustomAnalysis.PeakDetection</AssemblyName>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Direct Output" Condition="'$(Configuration)' == 'Debug'">
+		<OutputPath>$(LOCALAPPDATA)\CAMECA\AP Suite\Extensions\$(AssemblyName)</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Package">
+		<Title>PeakDetection</Title>
+		<Authors>CAMECA Instruments, Inc.</Authors>
+		<Description>Machine learning peak detection</Description>
+		<Copyright>Copyright © CAMECA Instruments, Inc. 2025 All rights reserved.</Copyright>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageIcon>icon.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<NuspecFile>PeakDetection.nuspec</NuspecFile>
+	</PropertyGroup>
+
+	<ItemGroup Label="Package Dependencies">
+		<PackageReference Include="Cameca.CustomAnalysis.Utilities" Version="3.7.0-alpha.12" />
+		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\icon.png" Pack="True" PackagePath="$(PackageIcon)" />
+		<None Include="..\README.md" Pack="True" PackagePath="$(PackageReadmeFile)" />
+		<None Include="..\LICENSE" Pack="True" PackagePath="$(PackageLicenseFile)" />
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+		<Deterministic>true</Deterministic>
+	</PropertyGroup>
+
+	<!-- Nuspec Initiaization and Configuration -->
+	<Target Name="InitializeStandardNuspecProperties" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' == 'true'">
+		<PropertyGroup Condition="'$(NuspecFile)' != '' and '$(NuspecProperties)' == ''">
+			<NuspecProperties>
+				id=$(AssemblyName);
+				version=$(Version);
+				authors=$(Authors);
+				description=$(Description);
+				title=$(Title);
+				copyright=$(Copyright);
+				readme=$(PackageReadmeFile);
+				license=$(PackageLicenseFile);
+				icon=$(PackageIcon);
+				repoType=$(RepositoryType);
+				repoUrl=$(RepositoryUrl);
+				projectUrl=$(RepositoryUrl);
+				repoCommit=$(RepositoryCommit);
+				tfw=$(TargetFramework);
+				outDir=$(MSBuildThisFileDirectory)$(OutputPath)
+			</NuspecProperties>
+		</PropertyGroup>
+	</Target>
+</Project>
