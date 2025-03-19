@@ -18,6 +18,32 @@
     <utilities:ButtonOverlayControl ButtonContent="Update"
                                    ButtonCommand="{Binding UpdateCommand}"
                                    OverlayVisibility="{Binding UpdateCommandCanExecute, Converter={StaticResource BooleanToVisibilityConverter}}">
-        <!--Main content here-->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" MaxHeight="1000" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <controls:Chart2D Grid.Column="0"
+                                  IsLogScaleY="True"
+                                  AxisXLabel="Da"
+                                  AxisYLabel="Count"
+                                  DataSource="{Binding ChartDataSource}"
+                                  UseDefaultViewportResetBehavior="{Binding NoValidViewport}"
+                                  IsViewportUpdatesEnabled="True"
+                                  ViewportLower="{Binding Properties.ViewportLower}"
+                                  ViewportUpper="{Binding Properties.ViewportUpper}" />
+                <controls:Table Grid.Column="1"
+                                ItemsSource="{Binding Ranges}" />
+            </Grid>
+            <Button Grid.Row="2"
+                    Content="Apply Peaks"
+                    Command="{Binding ApplyPeaksCommand}" />
+        </Grid>
     </utilities:ButtonOverlayControl>
 </UserControl>
