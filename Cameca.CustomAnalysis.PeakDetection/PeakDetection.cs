@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using Microsoft.Extensions.Logging;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -24,16 +25,15 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     private readonly IPyExecutor pyExecutor;
     private readonly IContainerProvider containerProvider;
     private readonly ILogger<PeakDetection> logger;
+    private float[]? histogramCounts;
 
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
 
     public ObservableCollection<IRenderData> ChartDataSource { get; } = new();
     public ObservableCollection<Range> Ranges { get; } = new();
 
-    public bool NoValidViewport => float.IsNaN(Properties.ViewportLower.X)
-        || float.IsNaN(Properties.ViewportUpper.X)
-        || float.IsNaN(Properties.ViewportLower.Y)
-        || float.IsNaN(Properties.ViewportUpper.Y);
+    [ObservableProperty]
+    private bool requiresPropertyUpdate = false;
 
     public PeakDetection(
         IStandardAnalysisFilterNodeBaseServices services,
@@ -48,28 +48,53 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         this.logger = logger;
     }
 
+    partial void OnRequiresPropertyUpdateChanged(bool value) => OnPropertyChanged(nameof(UpdateCommandCanExecute));
+
     protected override void OnPropertiesChanged(PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PeakDetectionProperties.ViewportLower) || e.PropertyName == nameof(PeakDetectionProperties.ViewportUpper))
         {
-            OnPropertyChanged(nameof(NoValidViewport));
         }
         else
         {
             base.OnPropertiesChanged(e);
-            DataStateIsValid = false;
+            RequiresPropertyUpdate = true;
         }
     }
 
-    protected override async Task<bool> Update(CancellationToken cancellationToken)
+    public override bool UpdateCommandCanExecute => base.UpdateCommandCanExecute || RequiresPropertyUpdate;
+
+
+    private async Task<bool> PropetiesDependantUpdate(CancellationToken cancellationToken)
     {
         Ranges.Clear();
-        ChartDataSource.Clear();
-        var histogramCounts = await GetHistogramCounts(cancellationToken);
+        // Get from cached value for performance if already set
+        // The histogram data should only need to be recalculated on data invalidation, and for that we alwasy call the full Update method
+        histogramCounts ??= await GetHistogramCounts(cancellationToken);
         var ranges = await PredictRanges(cancellationToken, histogramCounts);
         if (histogramCounts is null || ranges is null) { return false; }
         Ranges.AddRange(ranges.OrderBy(x => x.Lower));
 
+        // Update histogram render data with ranges if exists
+        if (ChartDataSource.SingleOrDefault() is IHistogramRenderData massHistogram)
+        {
+            massHistogram.VerticalSlices = Ranges
+            .Select(x => new Slice(x.Lower, x.Upper)
+            {
+                Color = Colors.Red
+            })
+            .ToList();
+        }
+        RequiresPropertyUpdate = false;
+        return true;
+    }
+
+    private async Task<bool> FullUpdate(CancellationToken cancellationToken)
+    {
+        ChartDataSource.Clear();
+        Ranges.Clear();
+        histogramCounts = await GetHistogramCounts(cancellationToken);
+        if (histogramCounts is null) { return false; }
         var histPos = new Vector2[BinCount];
         for (int i = 0; i < BinCount; i++)
         {
@@ -79,14 +104,25 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
 
         var massHistogram = Resources.ChartObjects.CreateHistogram(histPos, color: Colors.Black, thickness: 1f);
-        massHistogram.VerticalSlices = Ranges
-            .Select(x => new Slice(x.Lower, x.Upper)
-            {
-                Color = Colors.Red
-            })
-            .ToList();
         ChartDataSource.Add(massHistogram);
-        return true;
+        return await PropetiesDependantUpdate(cancellationToken);
+    }
+
+    // Full update - recomputes histogram values. Necessary if data state is invalidated
+    protected override async Task<bool> Update(CancellationToken cancellationToken)
+    {
+        if (DataStateIsValid)
+        {
+            if (RequiresPropertyUpdate)
+            {
+                return await PropetiesDependantUpdate(cancellationToken);
+            }
+        }
+        else
+        {
+            return await FullUpdate(cancellationToken);
+        }
+        return false;
     }
 
     [RelayCommand]
