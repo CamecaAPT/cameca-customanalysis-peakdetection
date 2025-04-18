@@ -140,7 +140,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     {
         if (Resources.RangeManager is { } rangeMangager && Resources.GetMassSpectrum() is not null)
         {
-            if (!await rangeMangager.SetIonRanges(Ranges.Select(x => x.IonTypeInfoRange)))
+            var discreteRanges = OverlapResolver.RemoveOverlaps(Ranges.Select(x => x.IonTypeInfoRange));
+            if (!await rangeMangager.SetIonRanges(discreteRanges))
             {
                 logger.LogWarning("Could not apply ranges");
             }
