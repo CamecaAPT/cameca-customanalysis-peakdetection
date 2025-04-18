@@ -79,7 +79,7 @@
                         </Style>
                     </DataGrid.CellStyle>
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Color">
+                        <DataGridTemplateColumn>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid HorizontalAlignment="Center"
@@ -90,17 +90,17 @@
                                                 BorderThickness="1"
                                                 BorderBrush="Black">
                                             <Border.Background>
-                                                <SolidColorBrush Color="{Binding Color}"/>
+                                                <SolidColorBrush Color="{Binding IonTypeInfoRange.Color}"/>
                                             </Border.Background>
                                         </Border>
                                     </Grid>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Min" Binding="{Binding Min, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Max" Binding="{Binding Max, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Volume" Binding="{Binding Volume, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Name" Binding="{Binding IonTypeInfoRange.Name, Mode=OneWay}" />
+                        <DataGridTextColumn Header="Min" Binding="{Binding IonTypeInfoRange.Min, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
+                        <DataGridTextColumn Header="Max" Binding="{Binding IonTypeInfoRange.Max, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
+                        <DataGridTextColumn Header="Type Confidence" Binding="{Binding Confidence, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>
