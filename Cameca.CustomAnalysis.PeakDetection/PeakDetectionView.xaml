@@ -27,6 +27,7 @@
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <controls:Chart2D Grid.Column="0"
@@ -38,8 +39,70 @@
                                   IsViewportUpdatesEnabled="True"
                                   ViewportLower="{Binding Properties.ViewportLower}"
                                   ViewportUpper="{Binding Properties.ViewportUpper}" />
-                <controls:Table Grid.Column="1"
-                                ItemsSource="{Binding Ranges}" />
+                
+                <GridSplitter Grid.Column="1"
+                              VerticalAlignment="Stretch"
+                              HorizontalAlignment="Center"/>
+                
+                <DataGrid Grid.Column="2"
+                          AutoGenerateColumns="False"
+                          Background="White"
+                          ItemsSource="{Binding Ranges}"
+                          HorizontalGridLinesBrush="LightGray"
+                          VerticalGridLinesBrush="LightGray"
+                          IsReadOnly="True">
+                    <DataGrid.Resources>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#deecf9"/>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#eff6fc"/>
+                        <Style x:Key="NumericTextBlock" TargetType="TextBlock">
+                            <Setter Property="TextAlignment" Value="Right" />
+                        </Style>
+                    </DataGrid.Resources>
+
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="2" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Padding="{TemplateBinding Padding}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Background="{TemplateBinding Background}"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Color">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                                        <Border Width="16"
+                                                Height="16"
+                                                VerticalAlignment="Center"
+                                                BorderThickness="1"
+                                                BorderBrush="Black">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{Binding Color}"/>
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Min" Binding="{Binding Min, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Max" Binding="{Binding Max, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding Volume, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" IsReadOnly="True" />
+                    </DataGrid.Columns>
+                </DataGrid>
             </Grid>
             <Button Grid.Row="2"
                     Content="Apply Peaks"
@@ -47,3 +110,4 @@
         </Grid>
     </utilities:ButtonOverlayControl>
 </UserControl>
+

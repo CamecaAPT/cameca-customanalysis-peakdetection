@@ -30,7 +30,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
 
     public ObservableCollection<IRenderData> ChartDataSource { get; } = new();
-    public ObservableCollection<Range> Ranges { get; } = new();
+    public ObservableCollection<IonTypeInfoRange> Ranges { get; } = new();
 
     [ObservableProperty]
     private bool requiresPropertyUpdate = false;
@@ -71,17 +71,21 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         // Get from cached value for performance if already set
         // The histogram data should only need to be recalculated on data invalidation, and for that we alwasy call the full Update method
         histogramCounts ??= await GetHistogramCounts(cancellationToken);
-        var ranges = await PredictRanges(cancellationToken, histogramCounts);
-        if (histogramCounts is null || ranges is null) { return false; }
-        Ranges.AddRange(ranges.OrderBy(x => x.Lower));
+        var results = await PredictRanges(cancellationToken, histogramCounts);
+        if (histogramCounts is null || results is null) { return false; }
+        foreach (var (rng, name) in results.Ranges.Zip(results.Res))
+        {
+            var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
+            Ranges.Add(infoRange);
+        }
 
         // Update histogram render data with ranges if exists
         if (ChartDataSource.SingleOrDefault() is IHistogramRenderData massHistogram)
         {
             massHistogram.VerticalSlices = Ranges
-            .Select(x => new Slice(x.Lower, x.Upper)
+            .Select(x => new Slice((float)x.Min, (float)x.Max)
             {
-                Color = Colors.Red
+                Color = x.Color,
             })
             .ToList();
         }
@@ -130,10 +134,10 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     {
         if (Resources.RangeManager is { } rangeMangager && Resources.GetMassSpectrum() is not null)
         {
-            var typedRanges = Ranges.Select(r => new IonTypeInfoRange("X", IonFormula.Unknown, 0d, r.Lower, r.Upper, Colors.Red));
-            var existingRanges = rangeMangager.GetIonRanges();
-            var inferredRanges = PeakRangeResolver.FromExistingRanges(typedRanges, existingRanges);
-            await rangeMangager.SetIonRanges(inferredRanges);
+            if (!await rangeMangager.SetIonRanges(Ranges))
+            {
+                logger.LogWarning("Could not apply ranges");
+            }
         }
     }
 
@@ -143,7 +147,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     // User decimal to avoid floating point errors in binning calculation
     internal int BinCount => (int)Math.Ceiling((new decimal(Upper) - new decimal(Lower)) / new decimal(BinWidth));
 
-    internal async Task<Range[]?> PredictRanges(CancellationToken token, float[]? data)
+    internal async Task<PyResults?> PredictRanges(CancellationToken token, float[]? data)
     {
         // Get other data
         if (data is null)
@@ -181,19 +185,30 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             functionName: "main");
         var executableModule = new LocalModuleExecutable("PeakDetectionModule", entryFunction);
 
-        var ranges = new CaptureManagedResults<Range[]>((PyObject? pyObj) =>
+        var ranges = new CaptureManagedResults<PyResults>((PyObject? pyObj) =>
         {
             if (pyObj is null) { return null; }
             dynamic resArray = pyObj;
-            int length = resArray.shape[0].As<int>();
-            var res = new Range[length];
+
+            // predicted peaks
+            float[][] pyRangeData = resArray[0].As<float[][]>();
+            var peak_pred = pyRangeData.Select(rng => new Range(rng[0] * BinWidth, rng[1] * BinWidth)).ToArray();
+
+            // res
+            int length = (int)pyObj[1].Length();
+            var res = new string[length];
             for (int i = 0; i < length; i++)
             {
-                float lower = resArray[i][0].As<float>();
-                float upper = resArray[i][1].As<float>();
-                res[i] = new Range(lower * BinWidth, upper * BinWidth);
+                res[i] = resArray[1][i].ToString();
             }
-            return res;
+
+            // confidence
+            float[] confidence = resArray[2].As<float[]>();
+
+            // profile_final
+            float[][] profile_final = resArray[3].As<float[][]>();
+
+            return new PyResults(peak_pred, res, confidence, profile_final);
         });
         var middleware = new IPyExecutorMiddleware[]
         {
@@ -248,4 +263,30 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     }
 
     internal record Range(float Lower, float Upper);
+    internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, float[][] profile_final);
+}
+
+internal static class ResourceExtensions
+{
+    public static IonTypeInfoRange CreateIonTypeInfoRange(this IResources resources, string name, double lower, double upper)
+    {
+        //resources.ElementData.
+        var formula = IonFormulaEx.Parse(name);
+        double volume = resources.ElementData is not null ? CalculateVolume(resources.ElementData, formula) : 0d;
+        var color = resources.GetIonColor(name, formula);
+        return new IonTypeInfoRange(name, formula, volume, lower, upper, color);
+    }
+
+    public const double AtomicColConv = 0.0016606d;
+
+    private static double CalculateVolume(IElementDataSet elemenData, IonFormula formula)
+    {
+        double totalVolume = 0d;
+        foreach (var (symbol, count) in formula)
+        {
+            var volume = elemenData.Elements.FirstOrDefault(x => x.Symbol == symbol)?.MolarVolume ?? 0;
+            totalVolume = volume * count;
+        }
+        return totalVolume * AtomicColConv;
+    }
 }
