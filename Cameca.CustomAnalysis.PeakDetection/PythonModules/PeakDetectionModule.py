@@ -157,8 +157,7 @@ def predict_peak_ions(spectrum, peak_range_pred, bin_width=0.01, max_width_Da=0.
     profile_final = profile[profile[:, 0].argsort()]
 
     # Run the IonClassifier model to predict the peak IDs
-    #modelpath = pkg_resources.resource_filename('peak_detection', 'Ionclassifier/modelweights/model_bestepoch.tar')
-    modelpath = 'model_bestepoch.tar'
+    modelpath = pkg_resources.resource_filename('peak_detection', 'Ionclassifier/modelweights/model_bestepoch.tar')
     RNNmodel = torch.load(modelpath, map_location='cpu')['ema']
     le = get_label_encoder()
     res, confidence = predict_elements(RNNmodel, profile_final, le, 'cpu')
