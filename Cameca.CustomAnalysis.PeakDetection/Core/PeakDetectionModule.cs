@@ -28,6 +28,7 @@ public class PeakDetectionModule : IModule
 
         extensionRegistry.RegisterAnalysisView<PeakDetectionView, PeakDetectionViewModel>(AnalysisViewLocation.Default);
 
-        containerProvider.InitializePythonDistribution("Peak Detection");
+        containerProvider.InitializePythonDistribution("Peak Detection - Python Configuration");
+        extensionRegistry.RegisterOptions<GlobalPeakDetectionProperties>("Peak Detection");
     }
 }

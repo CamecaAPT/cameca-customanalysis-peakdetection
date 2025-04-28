@@ -48,6 +48,17 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         this.logger = logger;
     }
 
+    protected override void OnCreated(NodeCreatedEventArgs eventArgs)
+    {
+        base.OnCreated(eventArgs);
+        if (eventArgs.Trigger == EventTrigger.Create && Resources.Options.GetOptions<GlobalPeakDetectionProperties>() is { } propDefaults)
+        {
+            Properties.Confidence = propDefaults.Confidence;
+            Properties.IntersectionOverUnion = propDefaults.IntersectionOverUnion;
+            Properties.MaxDetections = propDefaults.MaxDetections;
+        }
+    }
+
     partial void OnRequiresPropertyUpdateChanged(bool value) => OnPropertyChanged(nameof(UpdateCommandCanExecute));
 
     protected override void OnPropertiesChanged(PropertyChangedEventArgs e)
