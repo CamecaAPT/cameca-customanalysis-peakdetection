@@ -101,6 +101,8 @@
                         <DataGridTextColumn Header="Min" Binding="{Binding IonTypeInfoRange.Min, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
                         <DataGridTextColumn Header="Max" Binding="{Binding IonTypeInfoRange.Max, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
                         <DataGridTextColumn Header="Type Confidence" Binding="{Binding Confidence, StringFormat=N3, Mode=OneWay}" ElementStyle="{StaticResource NumericTextBlock}" />
+                        <DataGridTextColumn Header="2nd Name" Binding="{Binding Name2, Mode=OneWay, TargetNullValue=''}" />
+                        <DataGridTextColumn Header="2nd Confidence" Binding="{Binding Confidence2, StringFormat=N3, Mode=OneWay, TargetNullValue=''}" ElementStyle="{StaticResource NumericTextBlock}" />
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

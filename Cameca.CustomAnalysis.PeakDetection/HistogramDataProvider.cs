@@ -6,9 +6,9 @@ namespace Cameca.CustomAnalysis.PeakDetection;
 
 internal class HistogramDataProvider : IPyObjectProvider
 {
-    private readonly ReadOnlyMemory<float> data;
+    private readonly ReadOnlyMemory<double> data;
 
-    public HistogramDataProvider(ReadOnlyMemory<float> data)
+    public HistogramDataProvider(ReadOnlyMemory<double> data)
     {
         this.data = data;
     }

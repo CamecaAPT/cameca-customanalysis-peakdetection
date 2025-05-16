@@ -1,5 +1,4 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 
@@ -7,6 +6,10 @@ namespace Cameca.CustomAnalysis.PeakDetection;
 
 public partial class PeakDetectionProperties : ObservableObject
 {
+    [ObservableProperty]
+    [field:Display(Name = "Implementation")]
+    private PeakDetectionImplementation implementation = PeakDetectionImplementation.RandomForest;
+
     [ObservableProperty]
     [field: Display(Description = "Object confidence threshold for detection")]
     private double confidence = 0.2d;
@@ -26,4 +29,14 @@ public partial class PeakDetectionProperties : ObservableObject
     [ObservableProperty]
     [field: Display(AutoGenerateField = false)]
     private Vector2 viewportUpper;
+}
+
+public enum PeakDetectionImplementation
+{
+    [Display(Name = "Neural Network")]
+    NeuralNetwork = 1,
+    [Display(Name = "Random Forest")]
+    RandomForest = 2,
+    [Display(Name = "Random Forest (Reduced Set)")]
+    RandomForestReduced = 3,
 }

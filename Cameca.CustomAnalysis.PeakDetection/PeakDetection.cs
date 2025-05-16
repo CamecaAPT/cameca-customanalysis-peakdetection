@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Collections.Generic;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -25,7 +26,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     private readonly IPyExecutor pyExecutor;
     private readonly IContainerProvider containerProvider;
     private readonly ILogger<PeakDetection> logger;
-    private float[]? histogramCounts;
+    private double[]? histogramCounts;
 
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
 
@@ -78,7 +79,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     private async Task<bool> PropetiesDependantUpdate(CancellationToken cancellationToken)
     {
-        Ranges.Clear();
+        var unsorted = new List<IonTypeInfoRangeRowInfo>();
         // Get from cached value for performance if already set
         // The histogram data should only need to be recalculated on data invalidation, and for that we alwasy call the full Update method
         histogramCounts ??= await GetHistogramCounts(cancellationToken);
@@ -89,10 +90,20 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             var rng = results.Ranges[i];
             var name = results.Res[i];
             var confidence = results.Confidence[i];
-            var profile = results.profile_final[i];
+            string? name2 = results.Res2[i];
+            name2 = name2 != "NaN" ? name2 : null;
+            float? confidence2 = results.Confidence2[i];
+            confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
-            var rowInfo = new IonTypeInfoRangeRowInfo(infoRange, confidence, profile[0], profile[1]);
-            Ranges.Add(rowInfo);
+            var rowInfo = new IonTypeInfoRangeRowInfo(
+                infoRange, confidence,
+                name2, confidence2);
+            unsorted.Add(rowInfo);
+        }
+        Ranges.Clear();
+        foreach (var item in unsorted.OrderBy(x => x.IonTypeInfoRange.Min))
+        {
+            Ranges.Add(item);
         }
 
         // Update histogram render data with ranges if exists
@@ -119,9 +130,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         var histPos = new Vector2[BinCount];
         for (int i = 0; i < BinCount; i++)
         {
-            float x = Lower + (i * BinWidth);
-            float y = histogramCounts[i];
-            histPos[i] = new Vector2(x, y);
+            double x = Lower + (i * BinWidth);
+            double y = histogramCounts[i];
+            histPos[i] = new Vector2((float)x, (float)y);
         }
 
         var massHistogram = Resources.ChartObjects.CreateHistogram(histPos, color: Colors.Black, thickness: 1f);
@@ -159,13 +170,13 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
     }
 
-    internal float Lower { get; } = 0f;
-    internal float Upper { get; } = 307.2f;
-    internal float BinWidth { get; } = 0.01f;
+    internal double Lower { get; } = 0d;
+    internal double Upper { get; } = 307.2d;
+    internal double BinWidth { get; } = 0.01d;
     // User decimal to avoid floating point errors in binning calculation
     internal int BinCount => (int)Math.Ceiling((new decimal(Upper) - new decimal(Lower)) / new decimal(BinWidth));
 
-    internal async Task<PyResults?> PredictRanges(CancellationToken token, float[]? data)
+    internal async Task<PyResults?> PredictRanges(CancellationToken token, double[]? data)
     {
         // Get other data
         if (data is null)
@@ -205,18 +216,13 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
         var ranges = new CaptureManagedResults<PyResults>((PyObject? pyObj) =>
         {
-            // It appears that peak_pred and profile_final (index 0 & 3) can be unsorted
-            // res and confidence are sorted by min m/c value
-            // Sort all to match that same order
-
             if (pyObj is null) { return null; }
             dynamic resArray = pyObj;
 
             // predicted peaks
             float[][] pyRangeData = resArray[0].As<float[][]>();
             var peak_pred = pyRangeData
-                .Select(rng => new Range(rng[0] * BinWidth, rng[1] * BinWidth))
-                .OrderBy(x => x.Lower)
+                .Select(rng => new Range((float)(rng[0] * BinWidth), (float)(rng[1] * BinWidth)))
                 .ToArray();
 
             // res
@@ -230,11 +236,31 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             // confidence
             float[] confidence = resArray[2].As<float[]>();
 
-            // profile_final
-            float[][] profile_final = resArray[3].As<float[][]>();
-            profile_final = profile_final.OrderBy(x => x[0]).ToArray();
+            var res2 = new string[length];
+            if (resArray[3].IsNone())
+            {
+                Array.Fill(res2, "");
+            }
+            else
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    res2[i] = resArray[3][i].ToString();
+                }
+            }
 
-            return new PyResults(peak_pred, res, confidence, profile_final);
+            // confidence
+            float[] confidence2 = new float[length];
+            if (resArray[4].IsNone())
+            {
+                Array.Fill(confidence2, 0f);
+            }
+            else
+            {
+                confidence2 = resArray[4].As<float[]>();
+            }
+
+            return new PyResults(peak_pred, res, confidence, res2, confidence2);
         });
         var middleware = new IPyExecutorMiddleware[]
         {
@@ -260,7 +286,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         return null;
     }
 
-    internal async Task<float[]?> GetHistogramCounts(CancellationToken token)
+    internal async Task<double[]?> GetHistogramCounts(CancellationToken token)
     {
         if (await Services.IonDataProvider.GetOwnerIonData(Id, cancellationToken: token) is not { } ionData)
         {
@@ -269,9 +295,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         return CreateHistogramCounts(ionData, BinWidth, Lower, BinCount);
     }
 
-    private static float[] CreateHistogramCounts(IIonData ionData, float binWidth, float lower, int binCount)
+    private static double[] CreateHistogramCounts(IIonData ionData, double binWidth, double lower, int binCount)
     {
-        var histogram = new float[binCount];
+        var histogram = new double[binCount];
         foreach (var chunk in ionData.CreateSectionDataEnumerable(IonDataSectionName.Mass))
         {
             var mass = chunk.ReadSectionData<float>(IonDataSectionName.Mass).Span;
@@ -289,6 +315,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     }
 
     internal record Range(float Lower, float Upper);
-    internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, float[][] profile_final);
-    internal record IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, float Profile1, float Profile2);
+    internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, string[] Res2, float[] Confidence2);
+    internal record IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, string? Name2, float? Confidence2);
 }
