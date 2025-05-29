@@ -15,6 +15,8 @@ using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
+using Cameca.CustomAnalysis.PeakDetection.ModelValidation;
+using Prism.Services.Dialogs;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -23,9 +25,11 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 {
     public const string UniqueId = "Cameca.CustomAnalysis.PeakDetection.PeakDetection";
 
-    private readonly IPyExecutor pyExecutor;
     private readonly IContainerProvider containerProvider;
     private readonly ILogger<PeakDetection> logger;
+    private readonly PythonService pythonService;
+    private readonly ModelValidator modelValidator;
+    private readonly IDialogService dialogService;
     private double[]? histogramCounts;
 
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
@@ -39,14 +43,18 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     public PeakDetection(
         IStandardAnalysisFilterNodeBaseServices services,
         ResourceFactory resourceFactory,
-        IPyExecutor pyExecutor,
         IContainerProvider containerProvider,
-        ILogger<PeakDetection> logger)
+        ILogger<PeakDetection> logger,
+        PythonService pythonService,
+        ModelValidator modelValidator,
+        IDialogService dialogService)
         : base(services, resourceFactory)
     {
-        this.pyExecutor = pyExecutor;
         this.containerProvider = containerProvider;
         this.logger = logger;
+        this.pythonService = pythonService;
+        this.modelValidator = modelValidator;
+        this.dialogService = dialogService;
     }
 
     protected override void OnCreated(NodeCreatedEventArgs eventArgs)
@@ -54,6 +62,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         base.OnCreated(eventArgs);
         if (eventArgs.Trigger == EventTrigger.Create && Resources.Options.GetOptions<GlobalPeakDetectionProperties>() is { } propDefaults)
         {
+            Properties.Implementation = propDefaults.DefaultMethod;
+            Properties.ModelPath = propDefaults.DefaultModelPath;
+            Properties.ScalarPath = propDefaults.DefaultScalarPath;
             Properties.Confidence = propDefaults.Confidence;
             Properties.IntersectionOverUnion = propDefaults.IntersectionOverUnion;
             Properties.MaxDetections = propDefaults.MaxDetections;
@@ -184,6 +195,12 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             return null;
         }
 
+        // Validate model files to ensure trust during the Python code deserialization of unsafe pickle files
+        if (!ValidateModelFiles())
+        {
+            return null;
+        }
+
         // Get IonData to provide to APSuiteContext
         IIonData? ionData;
         try
@@ -194,7 +211,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                 return null;
             }
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
             return null;
         }
@@ -203,87 +220,136 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         var context = new APSuiteContextProvider(
             ionData,
             containerProvider,
-            Id);
-
-        // Configure Python delgated execution
-        var entryFunction = new EntryFunctionDefinition(new[]
-            {
-                new ParameterDefinition("context", context),
-                new ParameterDefinition("histogram", new HistogramDataProvider(data)),
-            },
-            functionName: "main");
-        var executableModule = new LocalModuleExecutable("PeakDetectionModule", entryFunction);
-
-        var ranges = new CaptureManagedResults<PyResults>((PyObject? pyObj) =>
-        {
-            if (pyObj is null) { return null; }
-            dynamic resArray = pyObj;
-
-            // predicted peaks
-            float[][] pyRangeData = resArray[0].As<float[][]>();
-            var peak_pred = pyRangeData
-                .Select(rng => new Range((float)(rng[0] * BinWidth), (float)(rng[1] * BinWidth)))
-                .ToArray();
-
-            // res
-            int length = (int)pyObj[1].Length();
-            var res = new string[length];
-            for (int i = 0; i < length; i++)
-            {
-                res[i] = resArray[1][i].ToString();
-            }
-
-            // confidence
-            float[] confidence = resArray[2].As<float[]>();
-
-            var res2 = new string[length];
-            if (resArray[3].IsNone())
-            {
-                Array.Fill(res2, "");
-            }
-            else
-            {
-                for (int i = 0; i < length; i++)
-                {
-                    res2[i] = resArray[3][i].ToString();
-                }
-            }
-
-            // confidence
-            float[] confidence2 = new float[length];
-            if (resArray[4].IsNone())
-            {
-                Array.Fill(confidence2, 0f);
-            }
-            else
-            {
-                confidence2 = resArray[4].As<float[]>();
-            }
-
-            return new PyResults(peak_pred, res, confidence, res2, confidence2);
-        });
-        var middleware = new IPyExecutorMiddleware[]
-        {
-            ranges,
-        };
-
+            Id,
+            Resources);
         // Run
         try
         {
-            await pyExecutor.Execute(executableModule, middleware, token);
+            // Configure Python delgated execution
+            var py_results = await pythonService
+                .MapPythonFunction("PeakDetectionModule", "main")
+                .SetParameters(context, (ReadOnlyMemory<double>)data)
+                .Call(token);
+            var results = MapToClrObjects(py_results);
+            if (results is null && DataState is not null)
+            {
+                DataState.IsErrorState = true;
+            }
             DataStateIsValid = true;
-            return ranges.HasResult ? ranges.Value : null;
+            return results;
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
             // Cancellation should not be considered a logged error
         }
         catch (PythonException e)
         {
             logger.LogError(e, "Error running Python");
+            if (DataState is not null)
+            {
+                DataState.IsErrorState = true;
+            }
         }
         DataStateIsValid = false;
         return null;
+    }
+
+    private bool ValidateModelFiles()
+    {
+        var reqsValidation = new List<string>();
+        if (Properties.Implementation == PeakDetectionImplementation.NeuralNetwork)
+        {
+            if (Properties.ModelPath is not null)
+            {
+                reqsValidation.Add(Properties.ModelPath);
+            }
+        }
+        else if (Properties.Implementation == PeakDetectionImplementation.RandomForest)
+        {
+            if (Properties.ModelPath is not null)
+            {
+                reqsValidation.Add(Properties.ModelPath);
+            }
+            if (Properties.ScalarPath is not null)
+            {
+                reqsValidation.Add(Properties.ScalarPath);
+            }
+        }
+
+        foreach (var path in reqsValidation)
+        {
+            var validationResult = modelValidator.ValidateModelFile(path);
+            if (!validationResult.IsTrusted)
+            {
+                // Prompt that model is untrusted: abort, continue once, or add as trusted and continue
+                var result = dialogService.ShowUntrustedModelDialog(path, validationResult.Hash);
+                if (result is null || result is { AllowContinue: false })
+                {
+                    logger.LogError("Could not run peak detection: Model file is not trusted: {ModelPath}", path);
+                    if (DataState is not null)
+                    {
+                        DataState.IsErrorState = true;
+                    }
+                    return false;
+                }
+
+                // Optionally add as trusted file
+                if (result.AddTrusted && validationResult.Hash is not null)
+                {
+                    modelValidator.AddTrustedHash(validationResult.Hash);
+                }
+            }
+        }
+        return true;
+    }
+
+    private PyResults? MapToClrObjects(PyObject? pyObj)
+    {
+        if (pyObj is null) { return null; }
+        dynamic resArray = pyObj;
+
+        // predicted peaks
+        float[][] pyRangeData = resArray[0].As<float[][]>();
+        var peak_pred = pyRangeData
+            .Select(rng => new Range((float)(rng[0] * BinWidth), (float)(rng[1] * BinWidth)))
+            .ToArray();
+
+        // res
+        int length = (int)pyObj[1].Length();
+        var res = new string[length];
+        for (int i = 0; i < length; i++)
+        {
+            res[i] = resArray[1][i].ToString();
+        }
+
+        // confidence
+        float[] confidence = resArray[2].As<float[]>();
+
+        var res2 = new string[length];
+        if (resArray[3].IsNone())
+        {
+            Array.Fill(res2, "");
+        }
+        else
+        {
+            for (int i = 0; i < length; i++)
+            {
+                res2[i] = resArray[3][i].ToString();
+            }
+        }
+
+        // confidence
+        float[] confidence2 = new float[length];
+        if (resArray[4].IsNone())
+        {
+            Array.Fill(confidence2, 0f);
+        }
+        else
+        {
+            confidence2 = resArray[4].As<float[]>();
+        }
+
+        return new PyResults(peak_pred, res, confidence, res2, confidence2);
     }
 
     internal async Task<double[]?> GetHistogramCounts(CancellationToken token)

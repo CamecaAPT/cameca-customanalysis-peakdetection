@@ -62,18 +62,20 @@ def main(context: pyapsuite.APSuiteContext, histogram: System.ReadOnlyMemory[Sys
         peak_pred = result[:,:2].cpu()
         counts = result[:,2].cpu()
 
+    model_path = os.path.expandvars(context.properties.ModelPath)
+    # Check if the model is set and exists
+    if not os.path.isfile(model_path):
+        raise RuntimeError("ModelPath not set or file does not exist: %s" % model_path)
+    
     if implementation == PeakDetectionImplementation.NeuralNetwork:
-        res, confidence, profile_final = predict_peak_ions(spectrum, peak_pred, bin_width=0.01, max_width_Da=0.5)
+        res, confidence, profile_final = predict_peak_ions(model_path, spectrum, peak_pred, bin_width=0.01, max_width_Da=0.5)
         return peak_pred, res, confidence, None, None
     elif implementation == PeakDetectionImplementation.RandomForest:
-        scaler_path = pkg_resources.resource_filename('randomforest', 'StandardScaler.pkl')
-        model_path = pkg_resources.resource_filename('randomforest', 'RandomForestClassifier.pkl')
-        elem1, elem2, conf1, conf2 = random_forest(peak_pred, counts, scaler_path, model_path)
-        return peak_pred, elem1, conf1, elem2, conf2
-    elif implementation == PeakDetectionImplementation.RandomForestReduced:
-        scaler_path = pkg_resources.resource_filename('randomforest', 'StandardScaler_reducedset.pkl')
-        model_path = pkg_resources.resource_filename('randomforest', 'RandomForestClassifier_reducedset.pkl')
-        elem1, elem2, conf1, conf2 = random_forest(peak_pred, counts, scaler_path, model_path)
+        # RandomForest requires additional scalar model file
+        scalar_path = os.path.expandvars(context.properties.ScalarPath)
+        if not os.path.isfile(scalar_path):
+            raise RuntimeError("ScalarPath not set or file does not exist: %s" % scalar_path)
+        elem1, elem2, conf1, conf2 = random_forest(peak_pred, counts, scalar_path, model_path)
         return peak_pred, elem1, conf1, elem2, conf2
 
     raise RuntimeError("Unsupported implementation: %d" % implementation)
@@ -167,7 +169,7 @@ def predict_elements(model, spectrum, label_encoder, device):
         return element_predictions, confidence_scores
     
 
-def predict_peak_ions(spectrum, peak_range_pred, bin_width=0.01, max_width_Da=0.5):
+def predict_peak_ions(model_path, spectrum, peak_range_pred, bin_width=0.01, max_width_Da=0.5):
     '''
     Certain wide ranges due to the tail leads to over-high indensity,
     shrinking the other intensities, so set limit here
@@ -189,8 +191,7 @@ def predict_peak_ions(spectrum, peak_range_pred, bin_width=0.01, max_width_Da=0.
     profile_final = profile[profile[:, 0].argsort()]
 
     # Run the IonClassifier model to predict the peak IDs
-    modelpath = pkg_resources.resource_filename('peak_detection', 'Ionclassifier/modelweights/model_bestepoch.tar')
-    RNNmodel = torch.load(modelpath, map_location='cpu')['ema']
+    RNNmodel = torch.load(model_path, map_location='cpu')['ema']
     le = get_label_encoder()
     res, confidence = predict_elements(RNNmodel, profile_final, le, 'cpu')
 

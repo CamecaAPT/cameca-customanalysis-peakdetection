@@ -1,0 +1,62 @@
+﻿<UserControl x:Class="Cameca.CustomAnalysis.PeakDetection.ModelValidation.UntrustedModelDialog"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Cameca.CustomAnalysis.PeakDetection.ModelValidation" xmlns:prism="http://prismlibrary.com/"
+             mc:Ignorable="d" 
+             d:DataContext="{d:DesignInstance Type={x:Type local:UntrustedModelViewModel}}"
+             d:DesignHeight="450" d:DesignWidth="800">
+    <prism:Dialog.WindowStyle>
+        <Style TargetType="Window">
+            <Setter Property="prism:Dialog.WindowStartupLocation" Value="CenterOwner" />
+            <Setter Property="Title" Value="{Binding Title, Mode=OneWay}" />
+        </Style>
+
+    </prism:Dialog.WindowStyle>
+    
+    <DockPanel>
+        <UniformGrid DockPanel.Dock="Bottom"
+                     Columns="3"
+                     HorizontalAlignment="Right"
+                     Width="380">
+            <UniformGrid.Resources>
+                <Style TargetType="{x:Type Button}">
+                    <Setter Property="Margin" Value="4 0 0 0" />
+                </Style>
+            </UniformGrid.Resources>
+            <Button FocusManager.FocusedElement="{Binding RelativeSource={RelativeSource Self}}"
+                    Content="Abort"
+                    Command="{Binding AbortCommand}" />
+            <Button Content="Trust Once"
+                    Command="{Binding TrustOnceCommand}" />
+            <Button Content="Add as Trusted"
+                    Command="{Binding AddTrustedCommand}" />
+        </UniformGrid>
+        
+        <Image DockPanel.Dock="Left" Width="32" Height="32" Margin="16" Source="{Binding ImageSource, Mode=OneTime}" />
+        
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <!--<ColumnDefinition Width="Auto" />-->
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+
+            <TextBlock Grid.Column="0" Padding="0 8 8 8" TextWrapping="WrapWithOverflow">
+                <Run Text="The model is not trusted!" />
+                <LineBreak />
+                <Run Text="Loading an untrusted module could execute malicious code." />
+                <LineBreak />
+                <LineBreak />
+                <Run Text="File: " />
+                <Run Text="{Binding Path}" />
+                <LineBreak />
+                <Run Text="Hash: " />
+                <Run Text="{Binding Hash}" />
+            </TextBlock>
+        </Grid>
+    </DockPanel>
+</UserControl>

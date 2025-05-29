@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using Cameca.CustomAnalysis.Interface;
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 
@@ -7,8 +8,26 @@ namespace Cameca.CustomAnalysis.PeakDetection;
 public partial class PeakDetectionProperties : ObservableObject
 {
     [ObservableProperty]
-    [field:Display(Name = "Implementation")]
+    [field: Display(Name = "Method", Description = "Ensure the method matches that of the selected model file")]
     private PeakDetectionImplementation implementation = PeakDetectionImplementation.RandomForest;
+
+    private string? modelPath = null;
+    [Display(Name = "Model Path")]
+    [FilePath(AllowMultiple = false, Filter = "Model File (Python Pickle file) (*.pkl)|*.pkl|All Files (*.*)|*.*")]
+    public string? ModelPath
+    {
+        get => modelPath;
+        set => SetProperty(ref modelPath, value);
+    }
+
+    private string? scalarPath = null;
+    [Display(Name = "Scalar Path")]
+    [FilePath(AllowMultiple = false, Filter = "Scalar File (Python Pickle file) (*.pkl)|*.pkl|All Files (*.*)|*.*")]
+    public string? ScalarPath
+    {
+        get => scalarPath;
+        set => SetProperty(ref scalarPath, value);
+    }
 
     [ObservableProperty]
     [field: Display(Description = "Object confidence threshold for detection")]
@@ -37,6 +56,4 @@ public enum PeakDetectionImplementation
     NeuralNetwork = 1,
     [Display(Name = "Random Forest")]
     RandomForest = 2,
-    [Display(Name = "Random Forest (Reduced Set)")]
-    RandomForestReduced = 3,
 }

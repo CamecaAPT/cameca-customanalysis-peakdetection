@@ -1,0 +1,21 @@
+# model_bestepoch.tar
+# Link: https://github.com/uw-cmg/peak_detection/blob/afc07e6bb167a67ba15f0a8f9c546ed58707cbbf/peak_detection/Ionclassifier/modelweights/model_bestepoch.tar
+55C19B12C2F46F53CF2E131DFF4245752F3DE96710FB2540AA8ADB5FD7EA0CDF
+
+# RandomForestClassifier.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/RandomForestClassifier.pkl
+A229DB08104B73AA5163594407CD3B732FEFBF78B78B4B93F856BF340D868C9C
+
+# StandardScaler.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/StandardScaler.pkl
+774070C8C03937D7BE62606048E357624CABCC405631B3773EF7E2F3F912C333
+
+# RandomForestClassifier_reducedset.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/RandomForestClassifier_reducedset.pkl
+978AA3B3E4CAFB7A8BA1F095493E4F9846A0B1027DE4E8D54948BB79E9A2100E
+
+# StandardScaler_reducedset.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/StandardScaler_reducedset.pkl
+45C054A9D4C0B02019794A67FD7F42EF6C67FACC30BDC3F5C581A14960C55486
+
+# User added trusted model SHA256 hashes
