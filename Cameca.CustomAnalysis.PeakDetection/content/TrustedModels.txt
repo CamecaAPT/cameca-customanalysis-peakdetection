@@ -3,19 +3,59 @@
 55C19B12C2F46F53CF2E131DFF4245752F3DE96710FB2540AA8ADB5FD7EA0CDF
 
 # RandomForestClassifier.pkl
-# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/RandomForestClassifier.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier.pkl
 A229DB08104B73AA5163594407CD3B732FEFBF78B78B4B93F856BF340D868C9C
 
 # StandardScaler.pkl
-# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/StandardScaler.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler.pkl
 774070C8C03937D7BE62606048E357624CABCC405631B3773EF7E2F3F912C333
 
 # RandomForestClassifier_reducedset.pkl
-# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/RandomForestClassifier_reducedset.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset.pkl
 978AA3B3E4CAFB7A8BA1F095493E4F9846A0B1027DE4E8D54948BB79E9A2100E
 
 # StandardScaler_reducedset.pkl
-# Link: https://github.com/uw-cmg/peak_detection_extra/blob/36c7569543f722c7e731b02a8fe0ee654d8650b2/randomforest/StandardScaler_reducedset.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset.pkl
 45C054A9D4C0B02019794A67FD7F42EF6C67FACC30BDC3F5C581A14960C55486
+
+# RandomForestClassifier_reducedset_chgstate.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset_chgstate.pkl
+89D35A0CF8F32842417DEFF3F1A5B68DFC74E912CEF9EB8DDAD6AE9AA5A94FD2
+
+# RandomForestClassifier_reducedset_molecules.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset_molecules.pkl
+8047FC206F2FAC76F9A9C8E963241B04634C9DD1E110F1D6BE1F08939FDA9105
+
+# RandomForestClassifier_reducedset_molecules_chgstate.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset_molecules_chgstate.pkl
+EA12A470F986B71405BFF68E7287844475009037FC04363CD4A4943434A7F94C
+
+# RandomForestClassifier_reducedset_molecules_neighbors2.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset_molecules_neighbors2.pkl
+8061BFA6ABC3FC3BFC60D091108409C400EFF183DBC1C2C89976E6A7EEE09FE3
+
+# RandomForestClassifier_reducedset_peakneighbors2.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/RandomForestClassifier_reducedset_peakneighbors2.pkl
+0E89B5A14671AA38CF62CA61332BCFC6DE89787B6446D019110636FF5AF58DCE
+
+# StandardScaler_reducedset_chgstate.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset_chgstate.pkl
+95DE96FD2F9864EA82F4F0140A649E0CE9880E5EAC525BA190082FFD40625852
+
+# StandardScaler_reducedset_molecules.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset_molecules.pkl
+C729EBE5A49510461A7810D35C22A12691664580C98BC5895A6678EFD109E035
+
+# StandardScaler_reducedset_molecules_chgstate.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset_molecules_chgstate.pkl
+85B6EB4BF070EDDC4DEB58264E8C720A197BCB3A8F9EBBAFF6987897F063ABE6
+
+# StandardScaler_reducedset_molecules_neighbors2.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset_molecules_neighbors2.pkl
+AC7BD157DB5D7DF7806B3AB12D0D833BEA2C5D018C6935FDCDF3A0B15512C7BA
+
+# StandardScaler_reducedset_peakneighbors2.pkl
+# Link: https://github.com/uw-cmg/peak_detection_extra/blob/fc08f9b06a6d5505a87440300bc7287b33310366/randomforest/StandardScaler_reducedset_peakneighbors2.pkl
+695F190E86D67CF970DACDC98625C37E7920B1898F07A6ACC6E355106EB82F51
 
 # User added trusted model SHA256 hashes
