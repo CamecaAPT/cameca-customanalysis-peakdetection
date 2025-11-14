@@ -36,9 +36,9 @@
                                   AxisYLabel="Count"
                                   DataSource="{Binding ChartDataSource}"
                                   UseDefaultViewportResetBehavior="{Binding NoValidViewport}"
-                                  IsViewportUpdatesEnabled="True"
                                   ViewportLower="{Binding Properties.ViewportLower}"
-                                  ViewportUpper="{Binding Properties.ViewportUpper}" />
+                                  ViewportUpper="{Binding Properties.ViewportUpper}"
+                                  UseApplicationViewManager="True" />
                 
                 <GridSplitter Grid.Column="1"
                               VerticalAlignment="Stretch"
