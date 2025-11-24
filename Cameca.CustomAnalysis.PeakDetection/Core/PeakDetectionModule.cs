@@ -1,5 +1,5 @@
 ﻿using Cameca.CustomAnalysis.Interface;
-using Cameca.CustomAnalysis.PeakDetection.ModelValidation;
+using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
 using Cameca.CustomAnalysis.PythonCore;
 using Cameca.CustomAnalysis.Utilities;
 using Prism.Ioc;
@@ -17,13 +17,12 @@ public class PeakDetectionModule : IModule
         containerRegistry.AddCustomAnalysisUtilities(options => options.UseStandardBaseClasses = true);
         containerRegistry.RegisterPythonDistribution();
 
-        containerRegistry.Register<ModelValidator>();
-        containerRegistry.RegisterDialog<UntrustedModelDialog, UntrustedModelViewModel>(nameof(UntrustedModelViewModel));
-
         containerRegistry.Register<object, PeakDetection>(PeakDetection.UniqueId);
         containerRegistry.RegisterInstance(PeakDetection.DisplayInfo, PeakDetection.UniqueId);
         containerRegistry.Register<IAnalysisMenuFactory, PeakDetectionMenuFactory>(nameof(PeakDetectionMenuFactory));
         containerRegistry.Register<object, PeakDetectionViewModel>(PeakDetectionViewModel.UniqueId);
+
+        containerRegistry.RegisterDialog<ElementSelectionDialogView, ElementSelectionDialogViewModel>(nameof(ElementSelectionDialogViewModel));
     }
 
     public void OnInitialized(IContainerProvider containerProvider)

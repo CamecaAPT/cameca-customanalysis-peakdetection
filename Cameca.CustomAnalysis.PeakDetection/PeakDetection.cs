@@ -15,21 +15,38 @@ using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
-using Cameca.CustomAnalysis.PeakDetection.ModelValidation;
 using Prism.Services.Dialogs;
+using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
 [DefaultView(PeakDetectionViewModel.UniqueId, typeof(PeakDetectionViewModel))]
+[NodeType(NodeType.Analysis)]
 internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProperties>
 {
+    [RelayCommand]
+    public void SelectElements()
+    {
+        Services.DialogService.ShowDialog(
+            nameof(ElementSelectionDialogViewModel),
+            new DialogParameters
+            {
+                { "Models", Properties.ElementSelectionModels }
+            },
+            (results) =>
+            {
+                if (results.Result == ButtonResult.OK && results.Parameters.TryGetValue("Models", out List<ElementSelectionModel> models))
+                {
+                    Properties.ElementSelectionModels = models;
+                }
+            });
+    }
+
     public const string UniqueId = "Cameca.CustomAnalysis.PeakDetection.PeakDetection";
 
     private readonly IContainerProvider containerProvider;
     private readonly ILogger<PeakDetection> logger;
     private readonly PythonService pythonService;
-    private readonly ModelValidator modelValidator;
-    private readonly IDialogService dialogService;
     private double[]? histogramCounts;
 
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
@@ -37,24 +54,17 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     public ObservableCollection<IRenderData> ChartDataSource { get; } = new();
     public ObservableCollection<IonTypeInfoRangeRowInfo> Ranges { get; } = new();
 
-    [ObservableProperty]
-    private bool requiresPropertyUpdate = false;
-
     public PeakDetection(
         IStandardAnalysisFilterNodeBaseServices services,
         ResourceFactory resourceFactory,
         IContainerProvider containerProvider,
         ILogger<PeakDetection> logger,
-        PythonService pythonService,
-        ModelValidator modelValidator,
-        IDialogService dialogService)
+        PythonService pythonService)
         : base(services, resourceFactory)
     {
         this.containerProvider = containerProvider;
         this.logger = logger;
         this.pythonService = pythonService;
-        this.modelValidator = modelValidator;
-        this.dialogService = dialogService;
     }
 
     protected override void OnCreated(NodeCreatedEventArgs eventArgs)
@@ -62,16 +72,11 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         base.OnCreated(eventArgs);
         if (eventArgs.Trigger == EventTrigger.Create && Resources.Options.GetOptions<GlobalPeakDetectionProperties>() is { } propDefaults)
         {
-            Properties.Implementation = propDefaults.DefaultMethod;
-            Properties.ModelPath = propDefaults.DefaultModelPath;
-            Properties.ScalarPath = propDefaults.DefaultScalarPath;
             Properties.Confidence = propDefaults.Confidence;
             Properties.IntersectionOverUnion = propDefaults.IntersectionOverUnion;
             Properties.MaxDetections = propDefaults.MaxDetections;
         }
     }
-
-    partial void OnRequiresPropertyUpdateChanged(bool value) => OnPropertyChanged(nameof(UpdateCommandCanExecute));
 
     protected override void OnPropertiesChanged(PropertyChangedEventArgs e)
     {
@@ -80,13 +85,20 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
         else
         {
-            base.OnPropertiesChanged(e);
-            RequiresPropertyUpdate = true;
+            RunPeakDetectionCommandCanExecute = true;
         }
+        CanSave = true;
     }
 
-    public override bool UpdateCommandCanExecute => base.UpdateCommandCanExecute || RequiresPropertyUpdate;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RunPeakDetectionCommand))]
+    private bool runPeakDetectionCommandCanExecute = true;
 
+    [RelayCommand(CanExecute = nameof(RunPeakDetectionCommandCanExecute))]
+    public async Task RunPeakDetection(CancellationToken cancellationToken)
+    {
+        RunPeakDetectionCommandCanExecute = !(await PropetiesDependantUpdate(cancellationToken));
+    }
 
     private async Task<bool> PropetiesDependantUpdate(CancellationToken cancellationToken)
     {
@@ -103,12 +115,13 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             var confidence = results.Confidence[i];
             string? name2 = results.Res2[i];
             name2 = name2 != "NaN" ? name2 : null;
+            Color? color2 = name2 is not null ? Resources.GetIonColor(name2) : null;
             float? confidence2 = results.Confidence2[i];
             confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
             var rowInfo = new IonTypeInfoRangeRowInfo(
                 infoRange, confidence,
-                name2, confidence2);
+                color2, name2, confidence2);
             unsorted.Add(rowInfo);
         }
         Ranges.Clear();
@@ -128,7 +141,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                 })
                 .ToList();
         }
-        RequiresPropertyUpdate = false;
         return true;
     }
 
@@ -148,24 +160,16 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
         var massHistogram = Resources.ChartObjects.CreateHistogram(histPos, color: Colors.Black, thickness: 1f);
         ChartDataSource.Add(massHistogram);
-        return await PropetiesDependantUpdate(cancellationToken);
+        return true;
+        //return await PropetiesDependantUpdate(cancellationToken);
     }
 
     // Full update - recomputes histogram values. Necessary if data state is invalidated
     protected override async Task<bool> Update(CancellationToken cancellationToken)
     {
-        if (DataStateIsValid)
-        {
-            if (RequiresPropertyUpdate)
-            {
-                return await PropetiesDependantUpdate(cancellationToken);
-            }
-        }
-        else
-        {
-            return await FullUpdate(cancellationToken);
-        }
-        return false;
+        var res = await FullUpdate(cancellationToken);
+        RunPeakDetectionCommandCanExecute = true;
+        return res;
     }
 
     [RelayCommand]
@@ -191,12 +195,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     {
         // Get other data
         if (data is null)
-        {
-            return null;
-        }
-
-        // Validate model files to ensure trust during the Python code deserialization of unsafe pickle files
-        if (!ValidateModelFiles())
         {
             return null;
         }
@@ -228,7 +226,14 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             // Configure Python delgated execution
             var py_results = await pythonService
                 .MapPythonFunction("PeakDetectionModule", "main")
-                .SetParameters(context, (ReadOnlyMemory<double>)data)
+                .SetParameters(
+                    context,
+                    (ReadOnlyMemory<double>)data,
+                    Properties.ElementSelectionModels.Select(x => x.Element.ToString()).ToArray(),
+                    Properties.ElementSelectionModels.Where(x => x.IncludeComplex).Select(x => x.Element.ToString()).ToArray(),
+                    Properties.Confidence,
+                    Properties.IntersectionOverUnion,
+                    Properties.MaxDetections)
                 .Call(token);
             var results = MapToClrObjects(py_results);
             if (results is null && DataState is not null)
@@ -252,55 +257,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
         DataStateIsValid = false;
         return null;
-    }
-
-    private bool ValidateModelFiles()
-    {
-        var reqsValidation = new List<string>();
-        if (Properties.Implementation == PeakDetectionImplementation.NeuralNetwork)
-        {
-            if (Properties.ModelPath is not null)
-            {
-                reqsValidation.Add(Properties.ModelPath);
-            }
-        }
-        else if (Properties.Implementation == PeakDetectionImplementation.RandomForest)
-        {
-            if (Properties.ModelPath is not null)
-            {
-                reqsValidation.Add(Properties.ModelPath);
-            }
-            if (Properties.ScalarPath is not null)
-            {
-                reqsValidation.Add(Properties.ScalarPath);
-            }
-        }
-
-        foreach (var path in reqsValidation)
-        {
-            var validationResult = modelValidator.ValidateModelFile(path);
-            if (!validationResult.IsTrusted)
-            {
-                // Prompt that model is untrusted: abort, continue once, or add as trusted and continue
-                var result = dialogService.ShowUntrustedModelDialog(path, validationResult.Hash);
-                if (result is null || result is { AllowContinue: false })
-                {
-                    logger.LogError("Could not run peak detection: Model file is not trusted: {ModelPath}", path);
-                    if (DataState is not null)
-                    {
-                        DataState.IsErrorState = true;
-                    }
-                    return false;
-                }
-
-                // Optionally add as trusted file
-                if (result.AddTrusted && validationResult.Hash is not null)
-                {
-                    modelValidator.AddTrustedHash(validationResult.Hash);
-                }
-            }
-        }
-        return true;
     }
 
     private PyResults? MapToClrObjects(PyObject? pyObj)
@@ -382,5 +338,5 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     internal record Range(float Lower, float Upper);
     internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, string[] Res2, float[] Confidence2);
-    internal record IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, string? Name2, float? Confidence2);
+    internal record IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, Color? Color2, string? Name2, float? Confidence2);
 }

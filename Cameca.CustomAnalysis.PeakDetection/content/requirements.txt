@@ -1,1 +1,1 @@
-peak_detection @ git+https://github.com/CamecaAPT/peak_detection.git@e6b3608ec3b6e34910d4bf4627575248719757d1
+peak_detection @ git+https://github.com/CamecaAPT/peak_detection.git@6dbc1d1d3b7d8e92c076d9da03c8b7fc7df3f71c
