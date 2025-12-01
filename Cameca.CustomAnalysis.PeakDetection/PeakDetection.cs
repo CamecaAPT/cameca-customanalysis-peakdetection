@@ -153,7 +153,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             var name = StandardizeName(results.Res[i]);
             var confidence = results.Confidence[i];
             string? name2 = results.Res2[i];
-            name2 = name2 != "NaN" ? name2 : null;
+            name2 = name2 != "NaN" ? StandardizeName(name2) : null;
             float? confidence2 = results.Confidence2[i];
             confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
