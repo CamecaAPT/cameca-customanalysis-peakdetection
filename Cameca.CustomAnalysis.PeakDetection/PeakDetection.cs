@@ -17,6 +17,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
 using Prism.Services.Dialogs;
 using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
+using System.Text.RegularExpressions;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -75,7 +76,32 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             Properties.Confidence = propDefaults.Confidence;
             Properties.IntersectionOverUnion = propDefaults.IntersectionOverUnion;
             Properties.MaxDetections = propDefaults.MaxDetections;
+            Properties.ElementSelectionModels = GetInitialElements();
         }
+    }
+
+    private List<ElementSelectionModel> GetInitialElements()
+    {
+        var dict = new Dictionary<Element, bool>();
+        if (Resources?.GetMassSpectrum() is { } massSpec && massSpec.GetValidIonData() is { } ionData)
+        {
+            foreach (var ion in ionData.Ions)
+            {
+                bool isComplex = ion.Formula.Count > 1 || (ion.Formula.Count == 1 && ion.Formula.First().Value > 1);
+                foreach (var elem in ion.Formula)
+                {
+                    if (Enum.TryParse<Element>(elem.Key, out var elemEnum))
+                    {
+                        dict[elemEnum] = isComplex;
+                    }
+                }
+            }
+        }
+        return dict.Select(x => new ElementSelectionModel
+        {
+            Element = x.Key,
+            IncludeComplex = x.Value,
+        }).ToList();
     }
 
     protected override void OnPropertiesChanged(PropertyChangedEventArgs e)
@@ -85,7 +111,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
         else
         {
-            RunPeakDetectionCommandCanExecute = true;
+            SetRunPeakDetectionCommandCanExecute(true);
         }
         CanSave = true;
     }
@@ -97,7 +123,14 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     [RelayCommand(CanExecute = nameof(RunPeakDetectionCommandCanExecute))]
     public async Task RunPeakDetection(CancellationToken cancellationToken)
     {
-        RunPeakDetectionCommandCanExecute = !(await PropetiesDependantUpdate(cancellationToken));
+        var res = !(await PropetiesDependantUpdate(cancellationToken));
+        SetRunPeakDetectionCommandCanExecute(res);
+    }
+
+    private void SetRunPeakDetectionCommandCanExecute(bool canExecute)
+    {
+        // Requires at least one element selected to run
+        RunPeakDetectionCommandCanExecute = canExecute && Properties.ElementSelectionModels.Any();
     }
 
     private async Task<bool> PropetiesDependantUpdate(CancellationToken cancellationToken)
@@ -110,18 +143,19 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         if (histogramCounts is null || results is null) { return false; }
         for (int i = 0; i < results.Ranges.Length; i++)
         {
-            var rng = results.Ranges[i];
-            var name = results.Res[i];
+            var rng = results.Ranges[i]; 
+            var name = StandardizeName(results.Res[i]);
             var confidence = results.Confidence[i];
             string? name2 = results.Res2[i];
             name2 = name2 != "NaN" ? name2 : null;
-            Color? color2 = name2 is not null ? Resources.GetIonColor(name2) : null;
             float? confidence2 = results.Confidence2[i];
             confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
+            var infoRange2 = name2 is not null ? Resources.CreateIonTypeInfoRange(name2, rng.Lower, rng.Upper) : null;
             var rowInfo = new IonTypeInfoRangeRowInfo(
                 infoRange, confidence,
-                color2, name2, confidence2);
+                infoRange2, confidence2);
+            rowInfo.PropertyChanged += RowInfo_PropertyChanged;
             unsorted.Add(rowInfo);
         }
         Ranges.Clear();
@@ -130,18 +164,62 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             Ranges.Add(item);
         }
 
+        UpdateHistogramSlices();
+        return true;
+    }
+
+    private void UpdateHistogramSlices()
+    {
         // Update histogram render data with ranges if exists
         if (ChartDataSource.SingleOrDefault() is IHistogramRenderData massHistogram)
         {
             massHistogram.VerticalSlices = Ranges
-                .Select(x => x.IonTypeInfoRange)
-                .Select(x => new Slice((float)x.Min, (float)x.Max)
+                .Select(x =>
                 {
-                    Color = x.Color,
+                    var data = x.IonTypeInfoRange;
+                    return new Slice((float)data.Min, (float)data.Max)
+                    {
+                        Color = x.Use2 ? x.IonTypeInfoRange2!.Color : data.Color,
+                    };
                 })
                 .ToList();
         }
-        return true;
+    }
+
+    private void RowInfo_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is IonTypeInfoRangeRowInfo { } row && e.PropertyName == nameof(IonTypeInfoRangeRowInfo.Use2))
+        {
+            UpdateHistogramSlices();
+        }
+
+    }
+
+    /// <summary>
+    /// Python results apparently include some complex formulas with duplicate elements, so normalize to our requirement of one element per ion formula
+    /// </summary>
+    /// <param name="rawName"></param>
+    /// <returns></returns>
+    private string StandardizeName(string rawName)
+    {
+        if (!IonFormulaEx.TryParse(rawName, out var formula))
+        {
+            var components = new Dictionary<string, int>();
+            foreach (Match item in new Regex("(?<name>[A-Z][a-z]?)(?<count>[2-9]|[1-9][0-9]+)?").Matches(rawName))
+            {
+                string name = item.Groups["name"].Value;
+                string count = item.Groups["count"].Value;
+                
+                if (!components.ContainsKey(name))
+                {
+                    components[name] = 0;
+                }
+                components[name] += int.TryParse(count, out var intCount) ? intCount: 1;
+            }
+            var form = new IonFormula(components.Select((pair) => new IonFormula.Component(pair.Key, pair.Value)));
+            return form.ToString();
+        }
+        return rawName;
     }
 
     private async Task<bool> FullUpdate(CancellationToken cancellationToken)
@@ -177,7 +255,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     {
         if (Resources.RangeManager is { } rangeMangager && Resources.GetMassSpectrum() is not null)
         {
-            var discreteRanges = OverlapResolver.RemoveOverlaps(Ranges.Select(x => x.IonTypeInfoRange));
+            var ranges = Ranges.Select(x => x.Use2 ? x.IonTypeInfoRange2! : x.IonTypeInfoRange);
+            var discreteRanges = OverlapResolver.RemoveOverlaps(ranges);
             if (!await rangeMangager.SetIonRanges(discreteRanges))
             {
                 logger.LogWarning("Could not apply ranges");
@@ -338,5 +417,23 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     internal record Range(float Lower, float Upper);
     internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, string[] Res2, float[] Confidence2);
-    internal record IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, Color? Color2, string? Name2, float? Confidence2);
+    internal partial class IonTypeInfoRangeRowInfo : ObservableObject
+    {
+        [ObservableProperty]
+        private bool use2;
+
+        public IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, IonTypeInfoRange? IonTypeInfoRange2, float? Confidence2, bool use2 = false)
+        {
+            this.IonTypeInfoRange = IonTypeInfoRange;
+            this.IonTypeInfoRange2 = IonTypeInfoRange2;
+            this.Confidence = Confidence;
+            this.Confidence2 = Confidence2;
+            Use2 = use2;
+        }
+
+        public IonTypeInfoRange IonTypeInfoRange { get; }
+        public float Confidence { get; }
+        public IonTypeInfoRange? IonTypeInfoRange2 { get; }
+        public float? Confidence2 { get; }
+    }
 }
