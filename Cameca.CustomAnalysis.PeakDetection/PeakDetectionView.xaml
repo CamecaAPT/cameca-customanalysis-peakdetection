@@ -19,8 +19,8 @@
     </UserControl.Resources>
 
     <utilities:ButtonOverlayControl ButtonContent="Update"
-                                   ButtonCommand="{Binding UpdateCommand}"
-                                   OverlayVisibility="{Binding UpdateCommandCanExecute, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    ButtonCommand="{Binding UpdateCommand}"
+                                    OverlayVisibility="{Binding UpdateCommandCanExecute, Converter={StaticResource BooleanToVisibilityConverter}}">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -80,7 +80,7 @@
             <utilities:ButtonOverlayControl Grid.Column="1"
                                             ButtonContent="Run Peak Detection"
                                             ButtonCommand="{Binding RunPeakDetectionCommand}"
-                                            OverlayVisibility="{Binding RunPeakDetectionCommandCanExecute, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            OverlayVisibility="{Binding PeakDetectionDirty, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

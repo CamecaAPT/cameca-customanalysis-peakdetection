@@ -118,19 +118,25 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RunPeakDetectionCommand))]
+    private bool peakDetectionDirty = false;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RunPeakDetectionCommand))]
     private bool runPeakDetectionCommandCanExecute = true;
 
     [RelayCommand(CanExecute = nameof(RunPeakDetectionCommandCanExecute))]
     public async Task RunPeakDetection(CancellationToken cancellationToken)
     {
         var res = !(await PropetiesDependantUpdate(cancellationToken));
+        PeakDetectionDirty = false;
         SetRunPeakDetectionCommandCanExecute(res);
     }
 
-    private void SetRunPeakDetectionCommandCanExecute(bool canExecute)
+    private void SetRunPeakDetectionCommandCanExecute(bool hasChanges)
     {
-        // Requires at least one element selected to run
-        RunPeakDetectionCommandCanExecute = canExecute && Properties.ElementSelectionModels.Any();
+        // Requires at lease one element selected to run
+        RunPeakDetectionCommandCanExecute = hasChanges && Properties.ElementSelectionModels.Any();
+        PeakDetectionDirty |= hasChanges;
     }
 
     private async Task<bool> PropetiesDependantUpdate(CancellationToken cancellationToken)
@@ -246,7 +252,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     protected override async Task<bool> Update(CancellationToken cancellationToken)
     {
         var res = await FullUpdate(cancellationToken);
-        RunPeakDetectionCommandCanExecute = true;
+        SetRunPeakDetectionCommandCanExecute(true);
         return res;
     }
 
