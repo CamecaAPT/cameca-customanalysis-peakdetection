@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using Prism.Services.Dialogs;
 using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
 using System.Text.RegularExpressions;
+using System.ComponentModel.DataAnnotations;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -25,6 +26,12 @@ namespace Cameca.CustomAnalysis.PeakDetection;
 [NodeType(NodeType.Analysis)]
 internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProperties>
 {
+    private CachedDataModel? dataModel = null;
+    public RecommendElementsProperties RecommendationProperties { get; set; } = new();
+
+    [ObservableProperty]
+    private List<Element> recommendedElements = new();
+
     [RelayCommand]
     public void SelectElements()
     {
@@ -149,18 +156,19 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         if (histogramCounts is null || results is null) { return false; }
         for (int i = 0; i < results.Ranges.Length; i++)
         {
-            var rng = results.Ranges[i]; 
-            var name = StandardizeName(results.Res[i]);
+            var rng = results.Ranges[i];
+            var key = results.Res[i];
+            var name = StandardizeName(key);
             var confidence = results.Confidence[i];
-            string? name2 = results.Res2[i];
-            name2 = name2 != "NaN" ? StandardizeName(name2) : null;
+            string? key2 = results.Res2[i];
+            string? name2 = key2 != "NaN" ? StandardizeName(key2) : null;
             float? confidence2 = results.Confidence2[i];
             confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
             var infoRange2 = name2 is not null ? Resources.CreateIonTypeInfoRange(name2, rng.Lower, rng.Upper) : null;
             var rowInfo = new IonTypeInfoRangeRowInfo(
-                infoRange, confidence,
-                infoRange2, confidence2);
+                infoRange, key, confidence,
+                infoRange2, key2, confidence2);
             rowInfo.PropertyChanged += RowInfo_PropertyChanged;
             unsorted.Add(rowInfo);
         }
@@ -256,6 +264,46 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         return res;
     }
 
+    private async Task<CachedDataModel> LoadDataModel(CancellationToken token)
+    {
+        return await Resources.Progress.ShowDialog("Loading data", async (p, t) =>
+        {
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(token, t);
+            // Configure Python delgated execution
+            var py_results = await pythonService
+                .MapPythonFunction("PeakDetectionModule", "load_full_training_data")
+                .SetParameters(new object[] { p })
+                .Call(cts.Token);
+            var results = MapToClrDataModel(py_results);
+            return results;
+        });
+    }
+
+    private CachedDataModel MapToClrDataModel(PyObject? pyObj)
+    {
+        if (pyObj is null) { throw new InvalidOperationException("Incorrect return format from 'load_full_training_data'"); }
+        dynamic resArray = pyObj;
+
+        int[] encodedIons = resArray[0].As<int[]>();
+        double[] counts = resArray[1].As<double[]>();
+        double[] massToChart = resArray[2].As<double[]>();
+        var encoder = new Dictionary<string, int>();
+        var py_encoder = resArray[3];
+        foreach (var item in py_encoder.items())
+        {
+            encoder[item[0].As<string>()] = item[1].As<int>();
+        }
+        var decoder = new Dictionary<int, string>();
+        var py_decoder = resArray[4];
+        foreach (var item in py_decoder.items())
+        {
+            decoder[item[0].As<int>()] = item[1].As<string>();
+        }
+
+        return new CachedDataModel(encodedIons, counts, massToChart, encoder, decoder);
+    }
+
+
     [RelayCommand]
     public async Task ApplyPeaks(CancellationToken token)
     {
@@ -270,6 +318,93 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
     }
 
+    [RelayCommand]
+    public async Task RecommendElements(CancellationToken token)
+    {
+        // Ensure data model is cached
+        dataModel ??= await LoadDataModel(token);
+
+        // Run
+        try
+        {
+            var results = await Resources.Progress.ShowDialog("Recommending Elements", async (t) =>
+            {
+                var cte = CancellationTokenSource.CreateLinkedTokenSource(t, token);
+                // Configure Python delgated execution
+                var py_results = await pythonService
+                    .MapPythonFunction("PeakDetectionModule", "recommend_elements")
+                    .SetReloadOnCall(true)
+                    .SetParameters(
+                        ((ReadOnlyMemory<int>)(dataModel.EncodedIons)),
+                        ((ReadOnlyMemory<double>)(dataModel.Counts)),
+                        ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),
+                        dataModel.Encoder,
+                        dataModel.Decoder,
+                        (ReadOnlyMemory<double>)(Ranges.SelectMany(x => new double[] { x.IonTypeInfoRange.Min, x.IonTypeInfoRange.Max }).ToArray()),
+                        Ranges.Select(x => x.Use2 ? x.Key2! : x.Key).ToArray(),
+                        RecommendationProperties.Threshold,
+                        RecommendationProperties.NumElements,
+                        (string msg) => logger.LogDebug(msg))
+                    .Call(cte.Token);
+                string[] res = py_results!.As<string[]>();
+                return res;
+            });
+            //if (results is null && DataState is not null)
+            //{
+            //    DataState.IsErrorState = true;
+            //}
+            //DataStateIsValid = true;
+            //return results;
+
+            var newRecElem = new List<Element>();
+            foreach (var x in results)
+            {
+                if (Enum.TryParse<Element>(x, out var e) && !Properties.ElementSelectionModels.Any(x => x.Element == e))
+                {
+                    newRecElem.Add(e);
+                }
+            }
+            RecommendedElements = newRecElem;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation should not be considered a logged error
+        }
+        catch (PythonException e)
+        {
+            logger.LogError(e, "Error running Python");
+            if (DataState is not null)
+            {
+                DataState.IsErrorState = true;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void AddRecommend()
+    {
+        // Copy
+        var newSelectionModels = Properties.ElementSelectionModels.ToList();
+        bool anyAdded = false;
+        foreach (var elem in recommendedElements)
+        {
+            // Don't duplicate
+            if (!newSelectionModels.Any(x => x.Element == elem))
+            {
+                anyAdded = true;
+                newSelectionModels.Add(new ElementSelectionModel
+                {
+                    Element = elem,
+                    IncludeComplex = false,
+                });
+            }
+        }
+        if (anyAdded)
+        {
+            Properties.ElementSelectionModels = newSelectionModels;
+        }
+    }
+
     internal double Lower { get; } = 0d;
     internal double Upper { get; } = 307.2d;
     internal double BinWidth { get; } = 0.01d;
@@ -278,6 +413,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     internal async Task<PyResults?> PredictRanges(CancellationToken token, double[]? data)
     {
+        // Ensure data model is cached
+        dataModel ??= await LoadDataModel(token);
+
         // Get other data
         if (data is null)
         {
@@ -308,6 +446,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         // Run
         try
         {
+            //var results = await Resources.Progress.ShowDialog("Running Peak Detection", async (t) =>
+            //{
+            //    var cte = CancellationTokenSource.CreateLinkedTokenSource(t, token);
             // Configure Python delgated execution
             var py_results = await pythonService
                 .MapPythonFunction("PeakDetectionModule", "main")
@@ -318,9 +459,17 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                     Properties.ElementSelectionModels.Where(x => x.IncludeComplex).Select(x => x.Element.ToString()).ToArray(),
                     Properties.Confidence,
                     Properties.IntersectionOverUnion,
-                    Properties.MaxDetections)
+                    Properties.MaxDetections,
+                    ((ReadOnlyMemory<int>)(dataModel.EncodedIons)),
+                    ((ReadOnlyMemory<double>)(dataModel.Counts)),
+                    ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),
+                    dataModel.Encoder,
+                    dataModel.Decoder,
+                    Properties.UsePeakMaxima,
+                    (string msg) => logger.LogDebug(msg))
                 .Call(token);
-            var results = MapToClrObjects(py_results);
+                var results = MapToClrObjects(py_results);
+            //});
             if (results is null && DataState is not null)
             {
                 DataState.IsErrorState = true;
@@ -428,18 +577,49 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         [ObservableProperty]
         private bool use2;
 
-        public IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, float Confidence, IonTypeInfoRange? IonTypeInfoRange2, float? Confidence2, bool use2 = false)
+        public IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, string Key, float Confidence, IonTypeInfoRange? IonTypeInfoRange2, string? Key2, float? Confidence2, bool use2 = false)
         {
             this.IonTypeInfoRange = IonTypeInfoRange;
             this.IonTypeInfoRange2 = IonTypeInfoRange2;
             this.Confidence = Confidence;
             this.Confidence2 = Confidence2;
+            this.Key = Key;
+            this.Key2 = Key2;
             Use2 = use2;
         }
 
         public IonTypeInfoRange IonTypeInfoRange { get; }
+        public string Key { get; }
         public float Confidence { get; }
         public IonTypeInfoRange? IonTypeInfoRange2 { get; }
+        public string? Key2 { get; }
         public float? Confidence2 { get; }
     }
+
+    internal class CachedDataModel
+    {
+        public CachedDataModel(int[] encodedIons, double[] counts, double[] massToChart, Dictionary<string, int> encoder, Dictionary<int, string> decoder)
+        {
+            EncodedIons = encodedIons;
+            Counts = counts;
+            MassToCharge = massToChart;
+            Encoder = encoder;
+            Decoder = decoder;
+        }
+
+        public int[] EncodedIons { get; }
+        public double[] Counts { get; }
+        public double[] MassToCharge { get; }
+        public Dictionary<string, int> Encoder { get; }
+        public Dictionary<int, string> Decoder { get; }
+    }
+}
+
+public class RecommendElementsProperties
+{
+    [Display(Name = "Confidence Threshold", Description = "Assignments with confidence below this threshold are candidates to be considered for alternative elements")]
+    public double Threshold { get; set; } = 0.01;
+
+    [Display(Name = "Max Recommendations/Peak", Description = "Maximum number of alternative elements that can be proposed for any single peak")]
+    public int NumElements { get; set; } = 3;
 }

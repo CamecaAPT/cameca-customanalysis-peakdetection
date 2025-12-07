@@ -16,6 +16,17 @@
     <UserControl.Resources>
         <local:NullVisibilityConverter x:Key="NullVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <elementselection:ElementSelectionModelConverter x:Key="ElementSelectionModelConverter" />
+        <elementselection:ElementsDisplayConverter x:Key="ElementsDisplayConverter" />
+        <elementselection:ElementSelectionModelConverter FilterToIncludeComplex="True" x:Key="ComplexElementSelectionModelConverter" />
+        <Style TargetType="Label" x:Key="KeyLabel">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="0 0 2 0" />
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
     </UserControl.Resources>
 
     <utilities:ButtonOverlayControl ButtonContent="Update"
@@ -38,18 +49,6 @@
                     <ColumnDefinition Width="90" />
                     <ColumnDefinition Width="100" />
                 </Grid.ColumnDefinitions>
-                <Grid.Resources>
-                    <elementselection:ElementSelectionModelConverter x:Key="ElementSelectionModelConverter" />
-                    <elementselection:ElementSelectionModelConverter FilterToIncludeComplex="True" x:Key="ComplexElementSelectionModelConverter" />
-                    <Style TargetType="Label" x:Key="KeyLabel">
-                        <Setter Property="FontWeight" Value="Bold" />
-                        <Setter Property="HorizontalAlignment" Value="Right" />
-                        <Setter Property="Margin" Value="0 0 2 0" />
-                    </Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="TextWrapping" Value="Wrap" />
-                    </Style>
-                </Grid.Resources>
 
                 <Label Grid.Row="0" Grid.Column="0" Style="{StaticResource KeyLabel}" Content="Elements:" />
                 <Label Grid.Row="0" Grid.Column="1">
@@ -90,9 +89,11 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <controls:Chart2D Grid.Row="0"
+                                      Grid.RowSpan="2"
                                       Grid.Column="0"
                                       IsLogScaleY="True"
                                       AxisXLabel="Da"
@@ -104,6 +105,7 @@
                                       UseApplicationViewManager="True" />
 
                     <GridSplitter Grid.Row="0"
+                                  Grid.RowSpan="2"
                                   Grid.Column="1"
                                   VerticalAlignment="Stretch"
                                   HorizontalAlignment="Center"/>
@@ -201,7 +203,42 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <Button Grid.Row="1"
+                    <Grid Grid.Row="1"
+                          Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="80" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="200" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <controls:PropertyGrid Grid.Row="0"
+                                               Grid.Column="0"
+                                               Margin="0"
+                                               ShowCategories="False"
+                                               SelectedObject="{Binding RecommendationProperties}"/>
+                        <Button Grid.Row="1"
+                                Grid.Column="0"
+                                Content="Recommend Elements"
+                                Command="{Binding RecommendElementsCommand}"/>
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="1"
+                                    Orientation="Vertical"
+                                    Margin="2">
+                            <Label Style="{StaticResource KeyLabel}" HorizontalAlignment="Left" Content="Recommended Elements:" />
+                            <Label>
+                                <TextBlock Text="{Binding RecommendedElements, Converter={StaticResource ElementsDisplayConverter}}" />
+                            </Label>
+                        </StackPanel>
+                        <Button Grid.Row="1"
+                                Grid.Column="1"
+                                Content="Add Recommended"
+                                Command="{Binding AddRecommendCommand}"/>
+                    </Grid>
+
+                    <Button Grid.Row="2"
                             Grid.Column="0"
                             Grid.ColumnSpan="3"
                             Content="Apply Peaks"

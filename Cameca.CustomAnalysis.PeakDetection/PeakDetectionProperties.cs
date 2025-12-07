@@ -22,6 +22,10 @@ public partial class PeakDetectionProperties : ObservableObject
     private int maxDetections = 2000;
 
     [ObservableProperty]
+    [field: Display(Name = "Use Peak Maxima", Description = "Use peak maxima for ion type assignment matching, else use left edge of range")]
+        private bool usePeakMaxima = true;
+
+    [ObservableProperty]
     [field: Display(AutoGenerateField = false)]
     private List<ElementSelectionModel> elementSelectionModels = new();
 
@@ -32,4 +36,5 @@ public partial class PeakDetectionProperties : ObservableObject
     [ObservableProperty]
     [field: Display(AutoGenerateField = false)]
     private Vector2 viewportUpper;
+
 }
