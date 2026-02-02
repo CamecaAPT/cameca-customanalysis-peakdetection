@@ -138,6 +138,7 @@ def main(context: pyapsuite.APSuiteContext,
          confidence,
          intersectionOverUnion,
          maxDetections,
+         iterations,
          ions,
          counts,
          mc,
@@ -172,6 +173,81 @@ def main(context: pyapsuite.APSuiteContext,
         result = predictor()[0]
         peak_pred = result[:,:2].cpu()
         counts = result[:,2].cpu()
+
+    # Multiple iterations
+    peak_range_toadd = list()
+    counts_toadd = list()
+    for i in range(iterations - 1):
+        logger(f"Running iteration {i + 1}")
+        multiplier = 0.01
+
+        # Processing spectrum part 1
+        n = spectrum_log.shape[0]
+        x1 = np.arange(n) * multiplier   # equivalent to your linspace
+        # peak_range_pred: list of (start, end)
+        ranges = np.asarray(peak_pred, dtype=float)   # shape (R, 2)
+        starts = ranges[:, 0] * multiplier                  # shape (R,)
+        ends   = ranges[:, 1] * multiplier                  # shape (R,)
+
+        # Broadcasting: shape (n, R), then reduce along R
+        in_any_range = np.logical_or.reduce(
+            (x1[:, None] > starts[None, :]) &
+            (x1[:, None] < ends[None, :]),
+            axis=1
+        )
+
+        idx_delete = x1[in_any_range]
+
+        # Processing spectrum part 2
+        x1 = np.asarray(x1)
+        spectrum_log = np.asarray(spectrum_log)
+        mask = np.isin(x1, idx_delete)
+
+        spectrum_log_mod = spectrum_log.copy()
+        spectrum_log_mod[mask] = 0.2
+
+        spectrum_log_mod = torch.Tensor(spectrum_log_mod)
+
+        # Running predictions
+        with temp_config_file(prediction_args) as config_path:
+            predictor_mod = DetectionPredictor(modelpath, spectrum_log_mod[None, None, ...], save_dir = save_dir, cfg = config_path)
+            result_mod = predictor_mod()[0]
+            peak_range_pred_mod = result_mod[:,:2].cpu()
+            counts_mod = result_mod[:,2].cpu()
+
+        # Collect any new peaks and append to the original list
+        tol = 0.5
+        for i, count in zip(peak_range_pred_mod, counts_mod):
+            start = float(i[0])
+            end = float(i[1])
+            max_iou = 1.0
+            min_dist = 1000
+            for j in peak_pred.tolist():
+
+                start2 = float(j[0])
+                end2 = float(j[1])
+                iou = calculate_iou_1d(interval1=[start, end], interval2=[start2, end2])
+                if iou < max_iou:
+                    max_iou = iou
+
+                if multiplier*abs(float(start)-float(start2)) < min_dist:
+                    min_dist = multiplier*abs(float(start)-float(start2))
+            # Want max iou to be 0 -> totally new peak
+            if max_iou == 0.0:
+                if min_dist > tol:
+                    peak_range_toadd.append([start, end])
+                    counts_toadd.append(count)
+
+        # Update existing preditions and counts
+        peak_pred = peak_pred.tolist()
+        counts = counts.tolist()
+
+        for i, j in zip(peak_range_toadd, counts_toadd):
+            peak_pred.append(i)
+            counts.append(j)
+
+        peak_pred = torch.Tensor(peak_pred)
+        counts = torch.Tensor(counts)
 
     # Apply element filtering to cached full element data
     df = create_filtered_dataframe(logger, full_mc, full_ion_counts, full_ions, encoder, element_list, elements_to_get_molecules)
@@ -384,3 +460,31 @@ def lookup_add_ions(lookup_model, x, thresh, logger):
     prediction_rankings = sorted(ranking_dict.items(), key=lambda x: x[1], reverse=True)
     logger(f"{prediction_rankings=}")
     return [i for i, c in prediction_rankings if c > thresh]
+
+def calculate_iou_1d(interval1, interval2):
+    """
+    Calculates the Intersection over Union (IoU) of two 1D intervals.
+
+    Args:
+        interval1: A tuple or list of two numbers representing the start and end of the first interval.
+        interval2: A tuple or list of two numbers representing the start and end of the second interval.
+
+    Returns:
+        The IoU of the two intervals, a float between 0 and 1.
+    """
+
+    start1, end1 = interval1
+    start2, end2 = interval2
+
+    intersection_start = max(start1, start2)
+    intersection_end = min(end1, end2)
+
+    intersection_length = max(0, intersection_end - intersection_start)
+
+    union_length = (end1 - start1) + (end2 - start2) - intersection_length
+
+    if union_length == 0:
+        return 0.0
+
+    iou = intersection_length / union_length
+    return iou

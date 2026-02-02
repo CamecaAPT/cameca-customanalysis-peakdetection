@@ -83,6 +83,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             Properties.Confidence = propDefaults.Confidence;
             Properties.IntersectionOverUnion = propDefaults.IntersectionOverUnion;
             Properties.MaxDetections = propDefaults.MaxDetections;
+            Properties.Iterations = propDefaults.Iterations;
             Properties.ElementSelectionModels = GetInitialElements();
         }
     }
@@ -460,6 +461,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                     Properties.Confidence,
                     Properties.IntersectionOverUnion,
                     Properties.MaxDetections,
+                    Properties.Iterations,
                     ((ReadOnlyMemory<int>)(dataModel.EncodedIons)),
                     ((ReadOnlyMemory<double>)(dataModel.Counts)),
                     ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),

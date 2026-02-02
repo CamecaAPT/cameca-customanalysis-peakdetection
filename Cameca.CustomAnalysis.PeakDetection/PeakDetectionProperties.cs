@@ -7,7 +7,7 @@ using System.Numerics;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
-public partial class PeakDetectionProperties : ObservableObject
+public partial class PeakDetectionProperties : ObservableValidator 
 {
     [ObservableProperty]
     [field: Display(Description = "Object confidence threshold for detection")]
@@ -20,6 +20,11 @@ public partial class PeakDetectionProperties : ObservableObject
     [ObservableProperty]
     [field: Display(Name = "Max Detections", Description = "Maximum number of detections per image")]
     private int maxDetections = 2000;
+
+    [ObservableProperty]
+    [field: Display(Name = "Iterations", Description = "Number of peak detection iterations. Each subsequent iteration removes detected ranges before re-running.")]
+    [field: Range(1, int.MaxValue, ErrorMessage = "Minimum of 1 iteration is required")]
+    private int iterations = 0;
 
     [ObservableProperty]
     [field: Display(Name = "Use Peak Maxima", Description = "Use peak maxima for ion type assignment matching, else use left edge of range")]
