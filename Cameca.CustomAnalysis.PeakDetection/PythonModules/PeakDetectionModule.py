@@ -173,12 +173,13 @@ def main(context: pyapsuite.APSuiteContext,
         result = predictor()[0]
         peak_pred = result[:,:2].cpu()
         counts = result[:,2].cpu()
+    logger(f"{peak_pred.size(dim=0)}")
+    peak_iter = [1] * peak_pred.size(dim=0)
 
     # Multiple iterations
-    peak_range_toadd = list()
-    counts_toadd = list()
-    for i in range(iterations - 1):
-        logger(f"Running iteration {i + 1}")
+    for iteration in range(iterations - 1):
+        peak_range_toadd = list()
+        counts_toadd = list()
         multiplier = 0.01
 
         # Processing spectrum part 1
@@ -248,6 +249,7 @@ def main(context: pyapsuite.APSuiteContext,
 
         peak_pred = torch.Tensor(peak_pred)
         counts = torch.Tensor(counts)
+        peak_iter += [iteration + 2] * len(peak_range_toadd)
 
     # Apply element filtering to cached full element data
     df = create_filtered_dataframe(logger, full_mc, full_ion_counts, full_ions, encoder, element_list, elements_to_get_molecules)
@@ -265,7 +267,7 @@ def main(context: pyapsuite.APSuiteContext,
                                                     use_peak_maxima=True,
                                                     spectrum_log=spectrum_log)
 
-    return peak_pred, elem1, conf1, elem2, conf2
+    return peak_pred, elem1, conf1, elem2, conf2, peak_iter
 
 
 @contextmanager

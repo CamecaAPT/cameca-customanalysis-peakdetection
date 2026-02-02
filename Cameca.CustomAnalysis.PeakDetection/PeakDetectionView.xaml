@@ -84,7 +84,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="500" />
+                        <ColumnDefinition Width="600" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
@@ -190,12 +190,21 @@
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="2nd Name" Binding="{Binding IonTypeInfoRange2.Name, Mode=OneWay, TargetNullValue=''}" />
                             <DataGridTextColumn Header="2nd Confidence" Binding="{Binding Confidence2, StringFormat=N3, Mode=OneWay, TargetNullValue=''}" ElementStyle="{StaticResource NumericTextBlock}" />
+                            <DataGridTextColumn Header="Iteration" Binding="{Binding Iteration, Mode=OneWay, TargetNullValue=''}" ElementStyle="{StaticResource NumericTextBlock}" />
                             <DataGridTemplateColumn Header="Use 2rn">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <CheckBox HorizontalAlignment="Center"
                                                   Visibility="{Binding IonTypeInfoRange2, Converter={StaticResource NullVisibilityConverter}}"
                                                   IsChecked="{Binding Use2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Include">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox HorizontalAlignment="Center"
+                                                  IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

@@ -164,18 +164,38 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             string? key2 = results.Res2[i];
             string? name2 = key2 != "NaN" ? StandardizeName(key2) : null;
             float? confidence2 = results.Confidence2[i];
+            int iteration = results.Iterations[i];
             confidence2 = confidence2 > 0 ? confidence2 : null;
             var infoRange = Resources.CreateIonTypeInfoRange(name, rng.Lower, rng.Upper);
             var infoRange2 = name2 is not null ? Resources.CreateIonTypeInfoRange(name2, rng.Lower, rng.Upper) : null;
             var rowInfo = new IonTypeInfoRangeRowInfo(
                 infoRange, key, confidence,
-                infoRange2, key2, confidence2);
+                infoRange2, key2, confidence2, iteration, include: iteration == 1);
             rowInfo.PropertyChanged += RowInfo_PropertyChanged;
             unsorted.Add(rowInfo);
         }
+
+        // Copy old ranges to merge user selections where possible
+        var oldInfo = Ranges.ToArray();
         Ranges.Clear();
         foreach (var item in unsorted.OrderBy(x => x.IonTypeInfoRange.Min))
         {
+            // Find if the range overlaps with any of the old existing ranges
+            var prevItem = oldInfo.FirstOrDefault(oldRow => RangeUtils.RangesOverlap(oldRow.IonTypeInfoRange, item.IonTypeInfoRange));
+            if (prevItem is not null)
+            {
+                // Get the 1st/2nd selection
+                var prevInfoRange = prevItem.Use2 ? prevItem.IonTypeInfoRange2 : prevItem.IonTypeInfoRange;
+                // If the selected item type matches the 2nd of the new type, selec the Use2 option to keep that type 
+                if (item.IonTypeInfoRange2 is not null && item.IonTypeInfoRange2.Formula.Equals(prevInfoRange?.Formula))
+                {
+                    item.Use2 = true;
+                }
+
+                // Regardless of type matching, try to maintain the inclusion selection
+                item.Include = prevItem.Include;
+            }
+
             Ranges.Add(item);
         }
 
@@ -189,6 +209,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         if (ChartDataSource.SingleOrDefault() is IHistogramRenderData massHistogram)
         {
             massHistogram.VerticalSlices = Ranges
+                .Where(x => x.Include)
                 .Select(x =>
                 {
                     var data = x.IonTypeInfoRange;
@@ -203,7 +224,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     private void RowInfo_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is IonTypeInfoRangeRowInfo { } row && e.PropertyName == nameof(IonTypeInfoRangeRowInfo.Use2))
+        if (sender is IonTypeInfoRangeRowInfo { } row
+            && (e.PropertyName == nameof(IonTypeInfoRangeRowInfo.Use2) || e.PropertyName == nameof(IonTypeInfoRangeRowInfo.Include)))
         {
             UpdateHistogramSlices();
         }
@@ -310,7 +332,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     {
         if (Resources.RangeManager is { } rangeMangager && Resources.GetMassSpectrum() is not null)
         {
-            var ranges = Ranges.Select(x => x.Use2 ? x.IonTypeInfoRange2! : x.IonTypeInfoRange);
+            var ranges = Ranges.Where(x => x.Include).Select(x => x.Use2 ? x.IonTypeInfoRange2! : x.IonTypeInfoRange);
             var discreteRanges = OverlapResolver.RemoveOverlaps(ranges);
             if (!await rangeMangager.SetIonRanges(discreteRanges))
             {
@@ -341,8 +363,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                         ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),
                         dataModel.Encoder,
                         dataModel.Decoder,
-                        (ReadOnlyMemory<double>)(Ranges.SelectMany(x => new double[] { x.IonTypeInfoRange.Min, x.IonTypeInfoRange.Max }).ToArray()),
-                        Ranges.Select(x => x.Use2 ? x.Key2! : x.Key).ToArray(),
+                        (ReadOnlyMemory<double>)(Ranges.Where(x => x.Include).SelectMany(x => new double[] { x.IonTypeInfoRange.Min, x.IonTypeInfoRange.Max }).ToArray()),
+                        Ranges.Where(x => x.Include).Select(x => x.Use2 ? x.Key2! : x.Key).ToArray(),
                         RecommendationProperties.Threshold,
                         RecommendationProperties.NumElements,
                         (string msg) => logger.LogDebug(msg))
@@ -350,12 +372,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                 string[] res = py_results!.As<string[]>();
                 return res;
             });
-            //if (results is null && DataState is not null)
-            //{
-            //    DataState.IsErrorState = true;
-            //}
-            //DataStateIsValid = true;
-            //return results;
 
             var newRecElem = new List<Element>();
             foreach (var x in results)
@@ -541,7 +557,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             confidence2 = resArray[4].As<float[]>();
         }
 
-        return new PyResults(peak_pred, res, confidence, res2, confidence2);
+        int[] iterations = resArray[5].As<int[]>();
+
+        return new PyResults(peak_pred, res, confidence, res2, confidence2, iterations);
     }
 
     internal async Task<double[]?> GetHistogramCounts(CancellationToken token)
@@ -573,13 +591,16 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     }
 
     internal record Range(float Lower, float Upper);
-    internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, string[] Res2, float[] Confidence2);
+    internal record PyResults(Range[] Ranges, string[] Res, float[] Confidence, string[] Res2, float[] Confidence2, int[] Iterations);
     internal partial class IonTypeInfoRangeRowInfo : ObservableObject
     {
         [ObservableProperty]
         private bool use2;
 
-        public IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, string Key, float Confidence, IonTypeInfoRange? IonTypeInfoRange2, string? Key2, float? Confidence2, bool use2 = false)
+        [ObservableProperty]
+        private bool include = true;
+
+        public IonTypeInfoRangeRowInfo(IonTypeInfoRange IonTypeInfoRange, string Key, float Confidence, IonTypeInfoRange? IonTypeInfoRange2, string? Key2, float? Confidence2, int Iteration, bool use2 = false, bool include = true)
         {
             this.IonTypeInfoRange = IonTypeInfoRange;
             this.IonTypeInfoRange2 = IonTypeInfoRange2;
@@ -587,7 +608,9 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             this.Confidence2 = Confidence2;
             this.Key = Key;
             this.Key2 = Key2;
+            this.Iteration = Iteration; 
             Use2 = use2;
+            Include = include; ;
         }
 
         public IonTypeInfoRange IonTypeInfoRange { get; }
@@ -596,6 +619,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         public IonTypeInfoRange? IonTypeInfoRange2 { get; }
         public string? Key2 { get; }
         public float? Confidence2 { get; }
+        public int Iteration { get; }
     }
 
     internal class CachedDataModel
