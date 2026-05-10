@@ -1,1 +1,2 @@
+cameca_apt_extension @ git+https://github.com/CamecaAPT/cameca-python-extension@7a945b8a797f3d5ccc908d22b74a89d6ad64e5c3#subdirectory=packages/cameca_apt_extension
 peak_detection @ git+https://github.com/CamecaAPT/peak_detection.git@a6152928457c6efa6f6ab7b01cd00cce1c6766ea

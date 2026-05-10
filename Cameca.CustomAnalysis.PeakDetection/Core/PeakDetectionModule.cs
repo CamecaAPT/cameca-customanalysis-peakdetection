@@ -15,7 +15,7 @@ public class PeakDetectionModule : IModule
     public void RegisterTypes(IContainerRegistry containerRegistry)
     {
         containerRegistry.AddCustomAnalysisUtilities(options => options.UseStandardBaseClasses = true);
-        containerRegistry.RegisterPythonDistribution();
+        containerRegistry.RegisterRpcPython();
 
         containerRegistry.Register<object, PeakDetection>(PeakDetection.UniqueId);
         containerRegistry.RegisterInstance(PeakDetection.DisplayInfo, PeakDetection.UniqueId);
@@ -31,7 +31,7 @@ public class PeakDetectionModule : IModule
 
         extensionRegistry.RegisterAnalysisView<PeakDetectionView, PeakDetectionViewModel>(AnalysisViewLocation.Default);
 
-        containerProvider.InitializePythonDistribution("Peak Detection - Python Configuration");
+        containerProvider.InitializeRpcPython("Peak Detection - Python Configuration");
         extensionRegistry.RegisterOptions<GlobalPeakDetectionProperties>("Peak Detection");
     }
 }

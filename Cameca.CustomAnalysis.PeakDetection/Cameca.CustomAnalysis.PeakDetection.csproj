@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net6.0-windows7.0</TargetFramework>
+		<TargetFramework>net8.0-windows7.0</TargetFramework>
 		<UseWPF>true</UseWPF>
 		<Platforms>x64</Platforms>
 		<Nullable>enable</Nullable>
@@ -35,7 +35,7 @@
 	</PropertyGroup>
 
 	<ItemGroup Label="Package Dependencies">
-		<PackageReference Include="Cameca.CustomAnalysis.PythonCore" Version="1.11.0" />
+		<PackageReference Include="Cameca.CustomAnalysis.PythonCore" Version="2.0.0-alpha.87" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 		<PackageReference Include="System.Drawing.Common" Version="9.0.5" />
 	</ItemGroup>

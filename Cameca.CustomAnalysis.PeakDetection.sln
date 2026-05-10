@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.3.32825.248
+# Visual Studio Version 18
+VisualStudioVersion = 18.5.11709.299
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cameca.CustomAnalysis.PeakDetection", "Cameca.CustomAnalysis.PeakDetection\Cameca.CustomAnalysis.PeakDetection.csproj", "{E8EAE32A-147D-4A3B-89A2-DAF433B77E60}"
 EndProject

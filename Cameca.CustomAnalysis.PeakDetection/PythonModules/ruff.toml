@@ -1,0 +1,13 @@
+line-length = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused import, undefined names, etc)
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modernize syntax)
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"

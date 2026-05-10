@@ -1,24 +1,29 @@
 ﻿using Cameca.CustomAnalysis.Interface;
+using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
 using Cameca.CustomAnalysis.PythonCore;
 using Cameca.CustomAnalysis.Utilities;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 using Prism.Ioc;
+using Prism.Services.Dialogs;
 using Python.Runtime;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Numerics;
-using System;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
-using Microsoft.Extensions.Logging;
-using CommunityToolkit.Mvvm.ComponentModel;
-using System.Collections.Generic;
-using Prism.Services.Dialogs;
-using Cameca.CustomAnalysis.PeakDetection.ElementSelection;
-using System.Text.RegularExpressions;
-using System.ComponentModel.DataAnnotations;
 
 namespace Cameca.CustomAnalysis.PeakDetection;
 
@@ -26,11 +31,16 @@ namespace Cameca.CustomAnalysis.PeakDetection;
 [NodeType(NodeType.Analysis)]
 internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProperties>
 {
-    private CachedDataModel? dataModel = null;
     public RecommendElementsProperties RecommendationProperties { get; set; } = new();
 
     [ObservableProperty]
     private List<Element> recommendedElements = new();
+
+
+    private PythonRpcSession<HostCallbacks, IPythonApi> session;
+    private bool disposed;
+    private readonly MemMapStore memMapStore = new();
+    //private readonly ILoggerFactory loggerFactory;
 
     [RelayCommand]
     public void SelectElements()
@@ -52,9 +62,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     public const string UniqueId = "Cameca.CustomAnalysis.PeakDetection.PeakDetection";
 
-    private readonly IContainerProvider containerProvider;
     private readonly ILogger<PeakDetection> logger;
-    private readonly PythonService pythonService;
+    private readonly PythonSessionFactory pythonSessionFactory;
     private double[]? histogramCounts;
 
     public static INodeDisplayInfo DisplayInfo { get; } = new NodeDisplayInfo("Peak Detection");
@@ -65,14 +74,37 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     public PeakDetection(
         IStandardAnalysisFilterNodeBaseServices services,
         ResourceFactory resourceFactory,
-        IContainerProvider containerProvider,
         ILogger<PeakDetection> logger,
-        PythonService pythonService)
+        //ILoggerFactory loggerFactory,
+        PythonSessionFactory pythonSessionFactory)
         : base(services, resourceFactory)
     {
-        this.containerProvider = containerProvider;
         this.logger = logger;
-        this.pythonService = pythonService;
+        this.pythonSessionFactory = pythonSessionFactory;
+        //this.loggerFactory = loggerFactory;
+
+        EnsurePythonSessionStarted();
+    }
+
+    [MemberNotNull(nameof(session))]
+    private void EnsurePythonSessionStarted()
+    {
+        if (disposed)
+        {
+            throw new ObjectDisposedException(GetType().FullName);
+        }
+        session ??= pythonSessionFactory.Start<HostCallbacks, IPythonApi>(
+            Path.Join("PythonModules", "PeakDetectionModule.py"),
+            new HostCallbacks(
+                logger,
+                //loggerFactory.CreateLogger("PeakDetectionModule.py"),
+                Resources,
+                memMapStore));
+    }
+    protected override void Dispose(bool disposing)
+    {
+        session.Dispose();
+        base.Dispose(disposing);
     }
 
     protected override void OnCreated(NodeCreatedEventArgs eventArgs)
@@ -246,12 +278,12 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             {
                 string name = item.Groups["name"].Value;
                 string count = item.Groups["count"].Value;
-                
+
                 if (!components.ContainsKey(name))
                 {
                     components[name] = 0;
                 }
-                components[name] += int.TryParse(count, out var intCount) ? intCount: 1;
+                components[name] += int.TryParse(count, out var intCount) ? intCount : 1;
             }
             var form = new IonFormula(components.Select((pair) => new IonFormula.Component(pair.Key, pair.Value)));
             return form.ToString();
@@ -287,43 +319,13 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         return res;
     }
 
-    private async Task<CachedDataModel> LoadDataModel(CancellationToken token)
+    private async Task LoadDataModel(CancellationToken cancellationToken)
     {
-        return await Resources.Progress.ShowDialog("Loading data", async (p, t) =>
+        await Resources.Progress.ShowDialog("Loading data", async (p, t) =>
         {
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(token, t);
-            // Configure Python delgated execution
-            var py_results = await pythonService
-                .MapPythonFunction("PeakDetectionModule", "load_full_training_data")
-                .SetParameters(new object[] { p })
-                .Call(cts.Token);
-            var results = MapToClrDataModel(py_results);
-            return results;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, t);
+            await session.Remote.PreloadTrainingData(p, cts.Token);
         });
-    }
-
-    private CachedDataModel MapToClrDataModel(PyObject? pyObj)
-    {
-        if (pyObj is null) { throw new InvalidOperationException("Incorrect return format from 'load_full_training_data'"); }
-        dynamic resArray = pyObj;
-
-        int[] encodedIons = resArray[0].As<int[]>();
-        double[] counts = resArray[1].As<double[]>();
-        double[] massToChart = resArray[2].As<double[]>();
-        var encoder = new Dictionary<string, int>();
-        var py_encoder = resArray[3];
-        foreach (var item in py_encoder.items())
-        {
-            encoder[item[0].As<string>()] = item[1].As<int>();
-        }
-        var decoder = new Dictionary<int, string>();
-        var py_decoder = resArray[4];
-        foreach (var item in py_decoder.items())
-        {
-            decoder[item[0].As<int>()] = item[1].As<string>();
-        }
-
-        return new CachedDataModel(encodedIons, counts, massToChart, encoder, decoder);
     }
 
 
@@ -344,33 +346,17 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
     [RelayCommand]
     public async Task RecommendElements(CancellationToken token)
     {
-        // Ensure data model is cached
-        dataModel ??= await LoadDataModel(token);
-
         // Run
         try
         {
-            var results = await Resources.Progress.ShowDialog("Recommending Elements", async (t) =>
+            await LoadDataModel(token);
+            var results = await Resources.Progress.ShowDialog("Recommending Elements", async () =>
             {
-                var cte = CancellationTokenSource.CreateLinkedTokenSource(t, token);
-                // Configure Python delgated execution
-                var py_results = await pythonService
-                    .MapPythonFunction("PeakDetectionModule", "recommend_elements")
-                    .SetReloadOnCall(true)
-                    .SetParameters(
-                        ((ReadOnlyMemory<int>)(dataModel.EncodedIons)),
-                        ((ReadOnlyMemory<double>)(dataModel.Counts)),
-                        ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),
-                        dataModel.Encoder,
-                        dataModel.Decoder,
-                        (ReadOnlyMemory<double>)(Ranges.Where(x => x.Include).SelectMany(x => new double[] { x.IonTypeInfoRange.Min, x.IonTypeInfoRange.Max }).ToArray()),
-                        Ranges.Where(x => x.Include).Select(x => x.Use2 ? x.Key2! : x.Key).ToArray(),
-                        RecommendationProperties.Threshold,
-                        RecommendationProperties.NumElements,
-                        (string msg) => logger.LogDebug(msg))
-                    .Call(cte.Token);
-                string[] res = py_results!.As<string[]>();
-                return res;
+                return await session.Remote.RecommendElements(
+                    (Ranges.Where(x => x.Include).Select(x => new double[] { x.IonTypeInfoRange.Min, x.IonTypeInfoRange.Max }).ToArray()),
+                    Ranges.Where(x => x.Include).Select(x => x.Use2 ? x.Key2! : x.Key).ToArray(),
+                    RecommendationProperties.Threshold,
+                    RecommendationProperties.NumElements);
             });
 
             var newRecElem = new List<Element>();
@@ -387,7 +373,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         {
             // Cancellation should not be considered a logged error
         }
-        catch (PythonException e)
+        catch (Exception e)
         {
             logger.LogError(e, "Error running Python");
             if (DataState is not null)
@@ -430,68 +416,32 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
 
     internal async Task<PyResults?> PredictRanges(CancellationToken token, double[]? data)
     {
-        // Ensure data model is cached
-        dataModel ??= await LoadDataModel(token);
-
-        // Get other data
-        if (data is null)
-        {
-            return null;
-        }
-
-        // Get IonData to provide to APSuiteContext
-        IIonData? ionData;
-        try
-        {
-            ionData = await Services.IonDataProvider.GetOwnerIonData(Id, cancellationToken: token);
-            if (ionData is null)
-            {
-                return null;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return null;
-        }
-
-        // Build APSuiteContext
-        var context = new APSuiteContextProvider(
-            ionData,
-            containerProvider,
-            Id,
-            Resources);
         // Run
         try
         {
-            //var results = await Resources.Progress.ShowDialog("Running Peak Detection", async (t) =>
-            //{
-            //    var cte = CancellationTokenSource.CreateLinkedTokenSource(t, token);
-            // Configure Python delgated execution
-            var py_results = await pythonService
-                .MapPythonFunction("PeakDetectionModule", "main")
-                .SetParameters(
-                    context,
-                    (ReadOnlyMemory<double>)data,
-                    Properties.ElementSelectionModels.Select(x => x.Element.ToString()).ToArray(),
-                    Properties.ElementSelectionModels.Where(x => x.IncludeComplex).Select(x => x.Element.ToString()).ToArray(),
-                    Properties.Confidence,
-                    Properties.IntersectionOverUnion,
-                    Properties.MaxDetections,
-                    Properties.Iterations,
-                    ((ReadOnlyMemory<int>)(dataModel.EncodedIons)),
-                    ((ReadOnlyMemory<double>)(dataModel.Counts)),
-                    ((ReadOnlyMemory<double>)(dataModel.MassToCharge)),
-                    dataModel.Encoder,
-                    dataModel.Decoder,
-                    Properties.UsePeakMaxima,
-                    (string msg) => logger.LogDebug(msg))
-                .Call(token);
-                var results = MapToClrObjects(py_results);
-            //});
-            if (results is null && DataState is not null)
-            {
-                DataState.IsErrorState = true;
-            }
+            await LoadDataModel(token);
+            string[] elementList = Properties.ElementSelectionModels.Select(x => x.Element.ToString()).ToArray();
+            string[] elementsOtMolecules = Properties.ElementSelectionModels.Where(x => x.IncludeComplex).Select(x => x.Element.ToString()).ToArray();
+            double confidence = Properties.Confidence;
+            double intersectionOverUnion = Properties.IntersectionOverUnion;
+            int maxDetections = Properties.MaxDetections;
+            int iterations = Properties.Iterations;
+
+            var res = await session.Remote.PredictRanges(
+                elementList,
+                elementsOtMolecules,
+                confidence,
+                intersectionOverUnion,
+                maxDetections,
+                iterations);
+
+            var results = new PyResults(
+                res.PeakPred.Select(x => new Range(x[0], x[1])).ToArray(),
+                res.Elem1,
+                res.Conf1,
+                res.Elem2,
+                res.Conf2,
+                res.PeakIter);
             DataStateIsValid = true;
             return results;
         }
@@ -499,7 +449,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         {
             // Cancellation should not be considered a logged error
         }
-        catch (PythonException e)
+        catch (Exception e)
         {
             logger.LogError(e, "Error running Python");
             if (DataState is not null)
@@ -509,57 +459,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         }
         DataStateIsValid = false;
         return null;
-    }
-
-    private PyResults? MapToClrObjects(PyObject? pyObj)
-    {
-        if (pyObj is null) { return null; }
-        dynamic resArray = pyObj;
-
-        // predicted peaks
-        float[][] pyRangeData = resArray[0].As<float[][]>();
-        var peak_pred = pyRangeData
-            .Select(rng => new Range((float)(rng[0] * BinWidth), (float)(rng[1] * BinWidth)))
-            .ToArray();
-
-        // res
-        int length = (int)pyObj[1].Length();
-        var res = new string[length];
-        for (int i = 0; i < length; i++)
-        {
-            res[i] = resArray[1][i].ToString();
-        }
-
-        // confidence
-        float[] confidence = resArray[2].As<float[]>();
-
-        var res2 = new string[length];
-        if (resArray[3].IsNone())
-        {
-            Array.Fill(res2, "");
-        }
-        else
-        {
-            for (int i = 0; i < length; i++)
-            {
-                res2[i] = resArray[3][i].ToString();
-            }
-        }
-
-        // confidence
-        float[] confidence2 = new float[length];
-        if (resArray[4].IsNone())
-        {
-            Array.Fill(confidence2, 0f);
-        }
-        else
-        {
-            confidence2 = resArray[4].As<float[]>();
-        }
-
-        int[] iterations = resArray[5].As<int[]>();
-
-        return new PyResults(peak_pred, res, confidence, res2, confidence2, iterations);
     }
 
     internal async Task<double[]?> GetHistogramCounts(CancellationToken token)
@@ -584,7 +483,8 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
                 if (binIndex >= 0 && binIndex < binCount)
                 {
                     histogram[binIndex]++;
-                };
+                }
+                ;
             }
         }
         return histogram;
@@ -608,7 +508,7 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
             this.Confidence2 = Confidence2;
             this.Key = Key;
             this.Key2 = Key2;
-            this.Iteration = Iteration; 
+            this.Iteration = Iteration;
             Use2 = use2;
             Include = include; ;
         }
@@ -620,24 +520,6 @@ internal partial class PeakDetection : BasicCustomAnalysisBase<PeakDetectionProp
         public string? Key2 { get; }
         public float? Confidence2 { get; }
         public int Iteration { get; }
-    }
-
-    internal class CachedDataModel
-    {
-        public CachedDataModel(int[] encodedIons, double[] counts, double[] massToChart, Dictionary<string, int> encoder, Dictionary<int, string> decoder)
-        {
-            EncodedIons = encodedIons;
-            Counts = counts;
-            MassToCharge = massToChart;
-            Encoder = encoder;
-            Decoder = decoder;
-        }
-
-        public int[] EncodedIons { get; }
-        public double[] Counts { get; }
-        public double[] MassToCharge { get; }
-        public Dictionary<string, int> Encoder { get; }
-        public Dictionary<int, string> Decoder { get; }
     }
 }
 
